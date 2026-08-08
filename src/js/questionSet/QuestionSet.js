@@ -25,7 +25,7 @@ import { dataOf, listOf } from '../../apis/unwrap';
 // Shape the list endpoint returns. Used as the fallback when a request fails so
 // the render path, which reads `set.questions` and `set.pageCount`, keeps working
 // instead of throwing on a null response.
-const EMPTY_PAGE = { questions: [], pageCount: 0, pageSize: DEFAULT_PAGE_SIZE };
+const EMPTY_PAGE = { questions: [], pageCount: 0, pageSize: DEFAULT_PAGE_SIZE, totalCount: 0 };
 
 const mapDispatchToProps = dispatch => ({
     saveQuestionSet: (payload) => dispatch(saveQuestionSet(payload)),
@@ -437,6 +437,15 @@ class QuestionSet extends React.Component {
         const first = (currentPage - 1) * pageSize + 1;
         const last = first + page.questions.length - 1;
         const searchedKey = set.searchedKey;
+        // The API now returns the total number of matches, so this can finally say
+        // "of 11,881" instead of leaving the range without context. The count query
+        // was already being run server-side to work out the page count; it just was
+        // not being sent. Still guarded rather than assumed: an older backend, or a
+        // response that omits the field, falls back to the range alone rather than
+        // rendering "of undefined".
+        const totalCount = Number.isFinite(page.totalCount) && page.totalCount > 0
+            ? page.totalCount
+            : null;
         // The applied-filter chips used to be duplicated here as well as in the
         // filter toolbar above, from two different pieces of state that did not stay
         // in sync — so the two lists of chips regularly disagreed. They now live only
@@ -444,6 +453,9 @@ class QuestionSet extends React.Component {
         return <div className='flex items-center justify-between gap-4 flex-wrap px-4 md:px-5 py-3 border-b border-gray-100 bg-gray-50/60'>
             <p className='text-sm text-gray-600'>
                 Showing <span className='font-semibold text-gray-900 tabular-nums'>{first}&ndash;{last}</span>
+                {totalCount !== null
+                    ? <> of <span className='font-semibold text-gray-900 tabular-nums'>{totalCount.toLocaleString()}</span></>
+                    : null}
                 {searchedKey ? <> for <span className='font-semibold text-gray-900'>&ldquo;{searchedKey}&rdquo;</span></> : null}
             </p>
         </div>;

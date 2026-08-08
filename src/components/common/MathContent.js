@@ -132,6 +132,27 @@ export const prepareContent = (html) => {
     }
     const raw = typeof html === 'string' ? html : String(html);
     // Question content legitimately contains <img> diagrams, tables and sup/sub.
+    //
+    // NOTE ON `style`
+    // ---------------
+    // `style` used to be on the allowlist. DOMPurify does strip javascript: and
+    // expression() out of a style attribute, so it was not a script-execution hole
+    // — but this same function renders user-submitted comments and replies, and an
+    // arbitrary style attribute is enough to lift an element out of the document
+    // flow and cover the page with it:
+    //
+    //   <span style="position:fixed;inset:0;z-index:9999">
+    //
+    // That is a clickjacking primitive: whatever the visitor clicks next goes to
+    // the attacker's element rather than the control they aimed at. Nothing in the
+    // imported question bank needs inline style to render correctly (the maths goes
+    // through KaTeX, which emits its own classed markup), so the attribute is gone
+    // rather than filtered.
+    //
+    // FORBID_ATTR/FORBID_TAGS are kept as belt-and-braces. With ALLOWED_ATTR set,
+    // DOMPurify already drops every attribute not on the allowlist, so the entries
+    // below are redundant by construction — they are retained only so that the
+    // intent survives if someone later widens the allowlist.
     const clean = DOMPurify.sanitize(raw, {
         ALLOWED_TAGS: [
             'p', 'br', 'div', 'span', 'b', 'strong', 'i', 'em', 'u', 's',
@@ -139,10 +160,10 @@ export const prepareContent = (html) => {
             'table', 'thead', 'tbody', 'tr', 'td', 'th', 'pre', 'code',
             'h1', 'h2', 'h3', 'h4', 'blockquote',
         ],
-        ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'colspan', 'rowspan', 'style', 'class', 'target', 'rel'],
+        ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'colspan', 'rowspan', 'class', 'target', 'rel'],
         ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|data:image\/)/i,
         FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input'],
-        FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus'],
+        FORBID_ATTR: ['style', 'onerror', 'onload', 'onclick', 'onmouseover', 'onfocus'],
     });
     return renderMath(clean);
 };

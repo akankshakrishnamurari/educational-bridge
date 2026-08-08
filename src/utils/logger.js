@@ -12,10 +12,17 @@
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 
-export const logError = (context, error) => {
+/**
+ * @param {string} context  Call site name, so the log says what broke.
+ * @param {Error}  error    The failure itself.
+ * @param {object} [detail] Optional extra context. The error boundary passes the
+ *                          React component stack here, which locates the throwing
+ *                          component far more precisely than the JS stack does.
+ */
+export const logError = (context, error, detail) => {
     if (isDevelopment) {
         // eslint-disable-next-line no-console
-        console.error('[' + context + ']', error);
+        console.error('[' + context + ']', error, detail !== undefined ? detail : '');
     }
 };
 
