@@ -35,6 +35,13 @@ export const typography = {
 export const layout = {
     container: 'w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8',
 
+    // Marketing / landing width. Deliberately much narrower than `container`:
+    // 1800px only exists so content pages can carry two 300px ad rails, and at
+    // that width a landing page's prose runs edge to edge with no breathing
+    // room. 1152px centred with a wide gutter is a normal reading measure and
+    // is what makes the page feel composed rather than stretched.
+    marketing: 'w-full max-w-6xl mx-auto px-6 sm:px-10 lg:px-12',
+
     // Row that holds [AdRail, content, AdRail]. Deliberately NO justify-center:
     // the rails must pin to the container edges so they land in the same place on
     // every page. Centring the row instead makes the rails drift inward by a
