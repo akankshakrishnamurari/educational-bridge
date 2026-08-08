@@ -1,40 +1,23 @@
 import React from 'react';
-import Split from "react-split";
 import { connect } from 'react-redux';
 import {saveQuestionSet, savePaperSet, updateGeneralInfo} from '../../store/actions/solgressAction';
 import QuestionsReceiver from "../../apis/QuestionsReceiver";
 import TagReceiver from "../../apis/TagReceiver";
-import TableContainer from "@mui/material/TableContainer";
-import Paper from "@mui/material/Paper";
-import Table from "@mui/material/Table";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
-import TableCell from "@mui/material/TableCell";
-import TableBody from "@mui/material/TableBody";
-import { AiFillSetting } from "react-icons/ai";
-import { BsFillPencilFill, BsPlusSquare } from "react-icons/bs";
-import { AiFillTags, AiFillSafetyCertificate } from 'react-icons/ai'
+import { AiFillTags } from 'react-icons/ai';
 import { JSXUtils } from '../../utils/JSXUtils';
-import {searchTableHeaderCellCSS, clickableSearchTableBodyCellTextCSS, pagingSelectionButtonStyle,
-     pagesizeOptionTextSize, generalTextSize, nonClickableSearchTableBodyCellTextCSS} from './../../constants/TextSizeConstants';
 import {currentURLHost} from './../../constants/hostConfig';
 import { UserDetailsUtil } from '../../utils/UserDetailsUtil';
-import Pagination from '@material-ui/lab/Pagination';
-import { Popover, ArrowContainer } from 'react-tiny-popover';
 import EducationalBridgeHeader from '../header/EducationalBridgeHeader';
 import PaperAPIsConnector from "../../apis/PaperAPIsConnector";
 import {MiscUtils} from "../../utils/MiscUtils";
-import QuestionSetSmallScreen from './QuestionSetSmallScreen';
 import TagFilterViewLarge from './TagFilter/TagFilterViewLarge';
-import { VscSettings } from "react-icons/vsc";
-import {MdArrowDropDown} from "react-icons/md";
 import ClipLoader from "react-spinners/ClipLoader";
 import PagingSection from '../adminPortal/platformCapabilities/PagingSection';
 import PageCard from '../../components/common/Card';
 import Badge from '../../components/common/Badge';
-import Button from '../../components/common/Button';
 import EmptyState from '../../components/common/EmptyState';
 import AdRail from '../../components/common/AdRail';
+import QuestionListItem from '../../components/questionSet/QuestionListItem';
 import { typography, layout } from '../../constants/designTokens';
 
 const mapDispatchToProps = dispatch => ({
@@ -124,17 +107,10 @@ class QuestionSet extends React.Component {
        window.open(currentURLHost + 'question/upsert?question_id=' + questionId)
     }
 
-    openQuestionSubmissionViewInNewTab = (questionId) => {
-        window.open(currentURLHost + 'question/view?question_id=' + questionId);
-    }
-
-    redirectToQuestionSubmissionViewInSameTab = (questionId) => {
-        window.location.href = currentURLHost + 'question/view?question_id=' + questionId
-    }
-
-    redirectToPaperSubmissionViewInNewTab = (paperId) => {
-        window.open(currentURLHost + 'paper/view?paper_id=' + paperId + '&paper_instance_id='+ MiscUtils.generateUUID())
-    }
+    // Navigation to a question or paper is now a real <a href> inside the list
+    // item rather than a programmatic window.location assignment, so the
+    // openInNewTab / redirectInSameTab helpers this class used to carry are gone.
+    // That restores cmd-click, middle-click and "open in new tab" on every row.
 
     redirectToQuestionsView = () => {
         let generalInfo = {...this.props.generalInfo};
@@ -151,30 +127,51 @@ class QuestionSet extends React.Component {
     
     }
     
+    /**
+     * Content-type switcher. Rendered as a segmented control rather than
+     * underlined tabs so it reads as a filter on one collection instead of
+     * navigation between unrelated pages -- which is what it actually is.
+     *
+     * "Notes" is a real roadmap item but has no content behind it, so it is
+     * explicitly marked and made non-interactive rather than looking like a tab
+     * that silently does nothing when clicked.
+     */
     getQuestionsTableHeaderJSX = () => {
         const isViewingQuestions = typeof this.props.generalInfo == "undefined" || this.props.generalInfo.isViewingQuestions;
-        const tabBase = 'px-4 md:px-6 py-3 text-sm font-semibold border-b-2 transition-colors';
-        const activeTab = 'border-primary-600 text-primary-700';
-        const inactiveTab = 'border-transparent text-gray-500 hover:text-gray-700';
-        return <div className='bg-white border-b border-gray-100'>
-                    <div className='flex flex-row'>
-                        <button
-                             className={tabBase + ' ' + (isViewingQuestions ? activeTab : inactiveTab)}
-                             onClick={this.redirectToQuestionsView}
-                        >
-                            Questions
-                        </button>
-                        <button
-                            className={tabBase + ' ' + (!isViewingQuestions ? activeTab : inactiveTab)}
-                            onClick={this.redirectToPapersView}
-                        >
-                            Papers
-                        </button>
-                        <div className={tabBase + ' ' + inactiveTab + ' cursor-default'}>
-                            Notes
-                            <span className='ml-1 text-xs text-warning-600 font-normal'>upcoming</span>
-                        </div>
-                    </div>
+        const base = 'relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1';
+        const active = 'bg-white text-gray-900 shadow-sm';
+        const inactive = 'text-gray-500 hover:text-gray-800';
+        const paperCount = (this.props.paperSet && Array.isArray(this.props.paperSet.papers))
+            ? this.props.paperSet.papers.length
+            : null;
+        return <div className='inline-flex items-center gap-1 p-1 bg-gray-100 rounded-xl'>
+                    <button
+                        className={base + ' ' + (isViewingQuestions ? active : inactive)}
+                        onClick={this.redirectToQuestionsView}
+                        aria-current={isViewingQuestions ? 'page' : undefined}
+                    >
+                        Questions
+                    </button>
+                    <button
+                        className={base + ' ' + (!isViewingQuestions ? active : inactive)}
+                        onClick={this.redirectToPapersView}
+                        aria-current={!isViewingQuestions ? 'page' : undefined}
+                    >
+                        Papers
+                        {paperCount !== null &&
+                            <span className='ml-1.5 text-xs font-normal text-gray-400 tabular-nums'>{paperCount}</span>
+                        }
+                    </button>
+                    <span
+                        className='px-4 py-2 text-sm font-semibold text-gray-400 cursor-not-allowed inline-flex items-center gap-1.5'
+                        aria-disabled="true"
+                        title="Notes are not available yet"
+                    >
+                        Notes
+                        <span className='px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-warning-100 text-warning-700'>
+                            Soon
+                        </span>
+                    </span>
                 </div>;
     }
 
@@ -235,127 +232,136 @@ class QuestionSet extends React.Component {
         </div>;
     }
 
-    getQuestionEligibleIcon = (question) => {
-        if(question.createdBy != null && question.createdBy == UserDetailsUtil.getUserGoogleId()) {
-            return <div className='flex items-center gap-2 px-2'>
-                <BsFillPencilFill size={15} className="text-primary-600 cursor-pointer" onClick={()=>this.openQuestionEditingViewInNewTab(question.id)}/>
-                {question.fulfilled && <AiFillSafetyCertificate className="text-success-600" size={18} />}
+    /**
+     * The question list. Each row is a QuestionListItem, which parses the tag
+     * taxonomy and renders subject/chapter/topic/difficulty/year as distinct
+     * elements instead of a row of interchangeable grey pills.
+     *
+     * Row numbering is absolute across pages (page 3 at 10/page starts at 21),
+     * derived from the pagination the API already returns. Per-page numbering
+     * that restarts at 1 tells the reader nothing.
+     */
+    getQuestionListJSX = () => {
+        const set = this.props.questionSet.questions;
+        if (set == undefined || set.questions == undefined || set.questions.length === 0) {
+            return <div className='py-6'>
+                <EmptyState
+                    title="No questions match those filters"
+                    description="Try removing a filter, or widening your search."
+                />
             </div>;
         }
-        else {
-            return <div className='flex items-center px-2'>
-                    {question.fulfilled && <AiFillSafetyCertificate className="text-success-600" size={18} />}
-                </div>
-        }
-    }
-
-    getQuestionsTableBodyRowsJSX = () => {
-        let tableRows = [];
-        if(this.props.questionSet.questions == undefined || this.props.questionSet.questions.questions.length===0) {
-            let noTableFoundRow = <TableRow>
-                <TableCell className="border-0">
-                    <EmptyState
-                        title="No questions found"
-                        description="Try adjusting your filters or search terms."
-                    />
-                </TableCell>
-            </TableRow>
-            tableRows.push(noTableFoundRow);
-            return tableRows;
-        }
         const currentUserGoogleId = UserDetailsUtil.getUserGoogleId();
-        this.props.questionSet.questions.questions.forEach((question, index) => {
-            const isOwner = currentUserGoogleId != null && question.createdBy === currentUserGoogleId;
-            let newRow = <TableRow key={question.id} className="hover:bg-gray-50 transition-colors">
-                <TableCell className="border-b border-gray-100 py-4">
-                    <div className='flex flex-row items-start'>
-                        <div className='flex flex-row grow cursor-pointer' onClick = {()=>this.redirectToQuestionSubmissionViewInSameTab(question.id)}>
-                            <div className="flex flex-col flex-1 min-w-0">
-                                <div className={typography.body}>
-                                    {/* Clamped preview - see .math-content--preview in index.css.
-                                        Full body (with diagrams and tables) renders on the solve page. */}
-                                    <div
-                                        className="math-content math-content--preview"
-                                        dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(question.description)}}
-                                    ></div>
-                                </div>
-                                {this.getTagsDivJSX(question.tags, question.createdBy)}
-                            </div>
-                            {this.getQuestionEligibleIcon(question)}
-                        </div>
-                        <div className='flex flex-row gap-2 pl-4 shrink-0'>
-                            <Button size="sm" variant="primary" onClick={()=>this.openQuestionSubmissionViewInNewTab(question.id)}>
-                                Solve
-                            </Button>
-                            {isOwner &&
-                                <Button size="sm" variant="secondary" onClick={()=>this.openQuestionEditingViewInNewTab(question.id)}>
-                                    Edit
-                                </Button>
-                            }
-                        </div>
-                    </div>
-                </TableCell>
-            </TableRow>;
-            tableRows.push(newRow);
-        });
-        return tableRows;
+        const pageSize = this.props.questionSet.currentPageSize || 10;
+        const currentPage = this.props.questionSet.currentPage || 1;
+        const firstIndex = (currentPage - 1) * pageSize + 1;
+        return <div className='divide-y divide-gray-100'>
+            {set.questions.map((question, index) => (
+                <QuestionListItem
+                    key={question.id}
+                    question={question}
+                    index={firstIndex + index}
+                    href={currentURLHost + 'question/view?question_id=' + question.id}
+                    isOwner={currentUserGoogleId != null && question.createdBy === currentUserGoogleId}
+                    onEdit={this.openQuestionEditingViewInNewTab}
+                />
+            ))}
+        </div>;
     }
 
-    redirectToPaperSubmissionViewInSameTab = (paperId) => {
-        window.location.href = currentURLHost + 'paper/view?paper_id=' + paperId + '&paper_instance_id='+ MiscUtils.generateUUID();
-    }
-
-    getPapersTableBodyRowsJSX = () => {
-        let tableRows = [];
-        if(this.props.paperSet.papers == undefined || this.props.paperSet.papers.length===0) {
-            let noTableFoundRow = <TableRow>
-                <TableCell className="border-0">
-                    <EmptyState
-                        title="No papers found"
-                        description="Try adjusting your filters or search terms."
-                    />
-                </TableCell>
-            </TableRow>
-            tableRows.push(noTableFoundRow);
-            return tableRows;
+    /**
+     * Summary strip above the list: how many results, and which filters produced
+     * them. Without this, a filtered list is indistinguishable from an unfiltered
+     * one and users lose track of why they are seeing so few results.
+     *
+     * NOTE ON COUNTS: the API returns only `pageSize` and `pageCount`, with no
+     * total-element count, and its pageCount is `floor(total/pageSize) + 1`. An
+     * exact total therefore cannot be derived, so this deliberately reports the
+     * range on the current page rather than inventing a total.
+     */
+    getResultSummaryJSX = () => {
+        const set = this.props.questionSet || {};
+        const page = set.questions;
+        if (page == undefined || page.questions == undefined || page.questions.length === 0) {
+            return <div />;
         }
-        this.props.paperSet.papers.forEach((paper, index) => {
-            let newRow = <TableRow key={paper.id} className="hover:bg-gray-50 transition-colors">
-                <TableCell className="border-b border-gray-100 py-4">
-                    <div className='flex flex-row items-start'>
-                        <div className='flex flex-col flex-1 cursor-pointer' onClick = {()=>this.redirectToPaperSubmissionViewInSameTab(paper.id)}>
-                            <div className={typography.body}>
-                                <div dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(paper.paper_name)}}></div>
-                            </div>
-                            {this.getTagsDivJSX(paper.tags)}
-                        </div>
-                        <div className='flex flex-row gap-2 pl-4 shrink-0'>
-                            <Button size="sm" variant="primary" onClick={()=>this.redirectToPaperSubmissionViewInNewTab(paper.id)}>
-                                Solve
-                            </Button>
-                        </div>
+        const pageSize = set.currentPageSize || 10;
+        const currentPage = set.currentPage || 1;
+        const first = (currentPage - 1) * pageSize + 1;
+        const last = first + page.questions.length - 1;
+        const activeTags = Array.isArray(set.tags) ? set.tags : [];
+        const searchedKey = set.searchedKey;
+        return <div className='flex items-center justify-between gap-4 flex-wrap px-4 md:px-5 py-3 border-b border-gray-100 bg-gray-50/60'>
+            <p className='text-sm text-gray-600'>
+                Showing <span className='font-semibold text-gray-900 tabular-nums'>{first}&ndash;{last}</span>
+                {searchedKey ? <> for <span className='font-semibold text-gray-900'>&ldquo;{searchedKey}&rdquo;</span></> : null}
+            </p>
+            {activeTags.length > 0 &&
+                <div className='flex items-center gap-1.5 flex-wrap'>
+                    <span className={typography.label}>Filters</span>
+                    {activeTags.map((tag) => (
+                        <Badge key={tag.id} variant="neutral">{tag.tagName}</Badge>
+                    ))}
+                </div>
+            }
+        </div>;
+    }
+
+    /**
+     * Papers list. A paper is a container of questions, so it gets a heavier
+     * treatment than a question row: a leading glyph and a clear count, because
+     * "start a timed paper" is a bigger commitment than "try one question" and
+     * the UI should say so.
+     */
+    getPapersListJSX = () => {
+        if(this.props.paperSet.papers == undefined || this.props.paperSet.papers.length===0) {
+            return <div className='py-6'>
+                <EmptyState
+                    title="No papers yet"
+                    description="Timed papers assembled from the question bank will appear here."
+                />
+            </div>;
+        }
+        return <div className='divide-y divide-gray-100'>
+            {this.props.paperSet.papers.map((paper) => {
+                const questionCount = Array.isArray(paper.questionIds)
+                    ? paper.questionIds.length
+                    : (Array.isArray(paper.questions) ? paper.questions.length : null);
+                const href = currentURLHost + 'paper/view?paper_id=' + paper.id
+                    + '&paper_instance_id=' + MiscUtils.generateUUID();
+                return <article key={paper.id} className='group flex items-start gap-4 px-4 md:px-5 py-4 bg-white transition-colors hover:bg-gray-50/70'>
+                    <span className='shrink-0 w-9 h-9 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center' aria-hidden="true">
+                        <AiFillTags size={18} />
+                    </span>
+                    <div className='flex-1 min-w-0'>
+                        <a href={href} className='block focus:outline-none'>
+                            <div
+                                className={typography.h3 + ' group-hover:text-primary-700 transition-colors'}
+                                dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(paper.paper_name)}}
+                            />
+                        </a>
+                        {questionCount !== null &&
+                            <p className='mt-1 text-xs text-gray-500 tabular-nums'>{questionCount} questions</p>
+                        }
+                        {this.getTagsDivJSX(paper.tags)}
                     </div>
-                </TableCell>
-            </TableRow>;
-            tableRows.push(newRow);
-        });
-        return tableRows;
+                    <a
+                        href={href}
+                        className='shrink-0 inline-flex items-center gap-1 text-sm font-semibold text-primary-600 hover:text-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded'
+                    >
+                        Start
+                        <span className='transition-transform group-hover:translate-x-0.5' aria-hidden="true">&rarr;</span>
+                    </a>
+                </article>;
+            })}
+        </div>;
     }
 
     getQuestionsTableJSX = () => {
+        const isViewingQuestions = this.props.generalInfo == undefined || this.props.generalInfo.isViewingQuestions;
         return <div className='w-full'>
-                {this.getQuestionsTableHeaderJSX()}
-                <TableContainer component={Paper} elevation={0} className='w-full' >
-                    <Table aria-label="questions and papers list">
-                        <TableBody>
-                            {
-                                this.props.generalInfo==undefined || this.props.generalInfo.isViewingQuestions
-                                    ?this.getQuestionsTableBodyRowsJSX()
-                                    :this.getPapersTableBodyRowsJSX()
-                            }
-                        </TableBody>
-                    </Table>
-                </TableContainer>
+                {isViewingQuestions ? this.getResultSummaryJSX() : null}
+                {isViewingQuestions ? this.getQuestionListJSX() : this.getPapersListJSX()}
             </div>
     } 
 
@@ -421,7 +427,11 @@ class QuestionSet extends React.Component {
     }
 
     handlePageChange = (event, value) => {
-        if(value<=0 || value>this.props.questionSet.pageCount) {
+        // Guard read the wrong path (questionSet.pageCount is undefined; the count
+        // is on questionSet.questions.pageCount), so `value > undefined` was always
+        // false and the upper bound was never enforced.
+        const pageCount = (this.props.questionSet.questions || {}).pageCount;
+        if(value<=0 || (pageCount != null && value>pageCount)) {
             return;
         }
         this.refreshSearch(value-1, this.props.questionSet.currentPageSize);
@@ -466,20 +476,23 @@ class QuestionSet extends React.Component {
         const isViewingQuestions = typeof this.props.generalInfo == "undefined" || this.props.generalInfo.isViewingQuestions;
         const set = this.props.questionSet || {};
         const currentPage = set.currentPage;
-        const pageCount = set.pageCount;
+        // pageCount lives on the response envelope (set.questions.pageCount), not
+        // on the redux slice itself. Reading set.pageCount returned undefined, so
+        // this indicator never rendered.
+        const pageCount = (set.questions || {}).pageCount;
         return <div className='flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3'>
             <div>
                 <h1 className={typography.h1}>
-                    {isViewingQuestions ? 'Question bank' : 'Papers'}
+                    {isViewingQuestions ? 'Practice questions' : 'Practice papers'}
                 </h1>
-                <p className='mt-1 text-sm text-gray-500'>
+                <p className='mt-1 text-sm text-gray-500 max-w-2xl'>
                     {isViewingQuestions
-                        ? 'A curated collection of previous-year JEE Main questions with detailed solutions, searchable by subject, chapter, topic and year.'
-                        : 'Timed practice papers curated from our question bank.'}
+                        ? 'Every question is tagged by subject, chapter, topic and difficulty, so you can drill exactly what you need instead of working front to back.'
+                        : 'Full-length timed papers assembled from the question bank.'}
                 </p>
             </div>
             {currentPage && pageCount
-                ? <div className='text-sm text-gray-500 shrink-0'>
+                ? <div className='text-sm text-gray-500 shrink-0 tabular-nums'>
                     Page <span className='font-semibold text-gray-700'>{currentPage}</span> of {pageCount}
                 </div>
                 : null}
@@ -487,9 +500,13 @@ class QuestionSet extends React.Component {
     }
 
     render() {
-        if(MiscUtils.isUserOnSmallScreen()) {
-            return <QuestionSetSmallScreen/>
-        }
+        // The small-screen fork is gone. This page used to hand mobile visitors off
+        // to QuestionSetSmallScreen, a near-duplicate carrying the pre-redesign MUI
+        // table, raw unparsed tag pills and unsanitised question HTML -- so none of
+        // the work on this page reached mobile, which is the majority of the
+        // audience. The layout below is responsive: the ad rails are already
+        // `hidden xl:block`, the filter toolbar wraps, and QuestionListItem has its
+        // own compact small-screen arrangement.
         if(typeof window == `undefined`){
             return <div/>;
         }
@@ -519,7 +536,16 @@ class QuestionSet extends React.Component {
                     the left/right rails. */}
                 <div className="flex-1 min-w-0">
                     {this.getPageHeadingJSX()}
-                    <div className='mt-6'>
+                    {/* Segmented control sits directly under the heading, then the
+                        tag filters, then the list. Previously the tabs were welded
+                        to the top of the list card, which made them look like part
+                        of the results rather than a control over them. */}
+                    {/* Horizontally scrollable on very narrow viewports so the
+                        segmented control never wraps mid-set or clips. */}
+                    <div className='mt-5 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto'>
+                        {this.getQuestionsTableHeaderJSX()}
+                    </div>
+                    <div className='mt-4'>
                         <TagFilterViewLarge/>
                     </div>
                     <PageCard padding="p-0" className="mt-4 overflow-hidden">

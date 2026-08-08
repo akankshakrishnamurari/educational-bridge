@@ -5,13 +5,10 @@ import TagReceiver from '../../../apis/TagReceiver';
 // Filter controls are styled inline in this file now, so the shared class strings
 // are no longer imported here.
 import QuestionsReceiver from '../../../apis/QuestionsReceiver'
-import PaperAPIsConnector from '../../../apis/PaperAPIsConnector';
-import Collapsible from "react-collapsible";
-import {AiOutlineDownSquare, AiOutlineClose} from "react-icons/ai";
+import {AiOutlineClose} from "react-icons/ai";
 import {MdArrowDropDown} from "react-icons/md";
 import { VscSettings } from "react-icons/vsc";
-import { Popover, ArrowContainer } from 'react-tiny-popover';
-import { JSXUtils } from '../../../utils/JSXUtils';
+import { Popover } from 'react-tiny-popover';
 import './leftSideBar.css';
 import { AiOutlineSearch } from "react-icons/ai";
 
@@ -38,18 +35,20 @@ class TagsFilterViewLarge extends React.Component {
     }
     addNewTag = (tag,index) => {
         let payload = {...this.props.generalInfo};
-        if(this.isASelectedTag(this.props.generalInfo.suggestedTags.get(tag)[index].id)){
-            let selectedTags=[];
-            for(let i=0;i<payload.selectedTags.length;i++){
-                if(payload.selectedTags[i].id != payload.suggestedTags.get(tag)[i].id){
-                    selectedTags.push(payload.selectedTags[i]);
-                }
-            }
-            payload.selectedTags= selectedTags;
+        const toggledTag = this.props.generalInfo.suggestedTags.get(tag)[index];
+        if (toggledTag == null) {
+            return;
+        }
+        if(this.isASelectedTag(toggledTag.id)){
+            // Deselect. The previous implementation walked selectedTags and compared
+            // each entry against suggestedTags.get(tag)[i] -- the SAME index in a
+            // different, unrelated array -- so it removed whichever tags happened to
+            // not line up positionally rather than the one that was clicked.
+            payload.selectedTags = payload.selectedTags.filter((selected) => selected.id !== toggledTag.id);
         }
         else{ 
             let selectedTags = [...payload.selectedTags];
-            selectedTags.push(payload.suggestedTags.get(tag)[index]);
+            selectedTags.push(toggledTag);
             payload.selectedTags=selectedTags;
         }
         this.props.updateGeneralInfo(payload);
@@ -254,25 +253,39 @@ class TagsFilterViewLarge extends React.Component {
             </Popover>
     }
 
+    // Filterable dimensions, keyed to the tag-name prefixes the importer actually
+    // writes (see backend-master-main/tools/import_jee_questions.py::build_tag_names).
+    //
+    // The Exam prefix was previously "Exam Name : ", which no tag in the database
+    // has ever matched -- the importer writes "Exam : ". That filter therefore
+    // returned an empty suggestion list forever.
+    //
+    // Subject, Chapter, Topic, Difficulty and Year are the dimensions the redesigned
+    // list surfaces on every row, so they are all filterable here. Offering
+    // difficulty and year in particular is what makes "drill exactly what you need"
+    // true rather than aspirational.
+    static FILTER_DIMENSIONS = [
+        ['subject', 'Subject : ', 'Subject', 'Search subjects'],
+        ['chapter', 'Chapter : ', 'Chapter', 'Search chapters'],
+        ['topic', 'Topic : ', 'Topic', 'Search topics'],
+        ['difficulty', 'Difficulty : ', 'Difficulty', 'Search difficulty'],
+        ['year', 'Year : ', 'Year', 'Search years'],
+        ['exam', 'Exam : ', 'Exam', 'Search exams'],
+        ['author', 'Created By : ', 'Author', 'Search authors'],
+    ];
+
     initializeGeneralInfo = () => {
         let tagPrefixPairMap = new Map();
-        tagPrefixPairMap.set("author", { prefix: "Created By : ", tag: "authorTag" , inputPlaceholder: "Author Name" ,searchPlaceholder:"Search Authors"});
-        tagPrefixPairMap.set("subject", { prefix: "Subject : ", tag: "subjectTag", inputPlaceholder: "Subject Name" ,searchPlaceholder:"Search Subjects"});
-        tagPrefixPairMap.set("topic", { prefix: "Topic : ", tag: "topicTag", inputPlaceholder: "Topic Name" ,searchPlaceholder:"Search Topics"});
-        tagPrefixPairMap.set("exam", { prefix: "Exam Name : ", tag: "examTag", inputPlaceholder: "Exam Name" ,searchPlaceholder:"Search exams"});
-        tagPrefixPairMap.set("other", { prefix: "", tag: "otherTag", inputPlaceholder: "other tags" ,searchPlaceholder:"Search other tags"});
-       
         const tagPlaceholder = new Map();
-        tagPlaceholder.set("author", '');
-        tagPlaceholder.set("subject", '');
-        tagPlaceholder.set("topic", '');
-        tagPlaceholder.set("exam", '');
+        let suggestedTags = new Map();
 
-        let suggestedTags= new Map();
-        suggestedTags.set("author",[]);
-        suggestedTags.set("subject",[]);
-        suggestedTags.set("topic",[]);
-        suggestedTags.set("exam",[]);
+        TagsFilterViewLarge.FILTER_DIMENSIONS.forEach(([key, prefix, inputPlaceholder, searchPlaceholder]) => {
+            tagPrefixPairMap.set(key, { prefix, tag: key + 'Tag', inputPlaceholder, searchPlaceholder });
+            tagPlaceholder.set(key, '');
+            suggestedTags.set(key, []);
+        });
+        // Retained for callers that look up the "other" bucket; not rendered as a control.
+        tagPrefixPairMap.set("other", { prefix: "", tag: "otherTag", inputPlaceholder: "Other tags", searchPlaceholder: "Search other tags" });
 
         let payload ={...this.props.generalInfo};
         payload.suggestedTags= suggestedTags;
@@ -280,22 +293,19 @@ class TagsFilterViewLarge extends React.Component {
         payload.tagPrefixPairMap = tagPrefixPairMap;
         payload.tagPlaceholder=tagPlaceholder;
         this.props.updateGeneralInfo(payload);
-        const allTagNames = ["author","subject","topic","exam"];
-        for(let index=0;index<4;index++){
-            let tag=allTagNames[index];
-            let prefixValue =tagPrefixPairMap.get(tag).prefix;
-            prefixValue=(prefixValue);
-            TagReceiver.getSuggestedTags((prefixValue)).then(tagData=>{
+
+        // Iterate the configured dimensions rather than a hardcoded count, so adding
+        // a dimension above does not silently skip prefetching its suggestions.
+        TagsFilterViewLarge.FILTER_DIMENSIONS.forEach(([key, prefix]) => {
+            TagReceiver.getSuggestedTags(prefix).then(tagData=>{
                 let payload ={...this.props.generalInfo};
                 let suggestedTagsByApi = [...tagData.data];
                 let suggestedTags =new Map(payload.suggestedTags);
-                suggestedTags.set(tag,suggestedTagsByApi);
+                suggestedTags.set(key, suggestedTagsByApi);
                 payload.suggestedTags=suggestedTags;
                 this.props.updateGeneralInfo(payload);
             });
-        }
-        
-        
+        });
     }
 
     // updateExistingTags = () => {
@@ -327,10 +337,9 @@ class TagsFilterViewLarge extends React.Component {
                     <VscSettings size={18} />
                     <span className='text-sm font-medium text-gray-700'>Filters</span>
                 </div>
-                {this.getTagDetailsJSX("author")}
-                {this.getTagDetailsJSX("subject")}
-                {this.getTagDetailsJSX("topic")}
-                {this.getTagDetailsJSX("exam")}
+                {TagsFilterViewLarge.FILTER_DIMENSIONS.map(([key]) => (
+                    <React.Fragment key={key}>{this.getTagDetailsJSX(key)}</React.Fragment>
+                ))}
                 <div className='flex justify-end grow'>
                     <button
                         disabled

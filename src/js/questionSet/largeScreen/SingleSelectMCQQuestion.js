@@ -1,233 +1,241 @@
 import React from 'react';
 import '../../../App.css';
-import {JSXUtils} from "../../../utils/JSXUtils";
-import {generalTextSize} from '../../../constants/TextSizeConstants';
 import Collapsible from "react-collapsible";
-import {AiOutlineDownSquare} from "react-icons/ai";
-import Table from "@mui/material/Table";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
-import TableCell from "@mui/material/TableCell";
-import TableBody from "@mui/material/TableBody";
-import { styled } from '@mui/system';
-import { Chart } from "react-google-charts";
-import SmallScreenSingleSelectMCQQuestion from '../smallScreen/SmallScreenSingleSelectMCQQuestion';
+import { AiOutlineDownSquare } from "react-icons/ai";
+import MathContent from '../../../components/common/MathContent';
+import OptionList from '../../../components/questionSet/OptionList';
+import Badge from '../../../components/common/Badge';
 import { typography } from '../../../constants/designTokens';
+import { parseQuestionTaxonomy } from '../../../utils/questionTaxonomy';
+
+// Single-select MCQ body: question stem, answer options, and (on the review
+// path) the solution and classification.
+//
+// WHAT CHANGED AND WHY
+// --------------------
+// 1. Options no longer render inside a MUI <Table>. See OptionList -- the old
+//    markup put <div>s directly inside <TableRow>, which is invalid HTML and
+//    caused the browser to foster-parent them out of the table, leaving an empty
+//    table box behind. That was the source of the large blank gap on this page.
+//
+// 2. The review path used to render a react-google-charts column chart fed from a
+//    HARDCODED array (22.94, 39.49, 31.3, 1.45, 3.45). Those numbers had no
+//    relationship to the question being viewed, so every learner was shown the
+//    same invented distribution as if it were real data. Removed. Real
+//    per-option response counts, when the API supplies them, now render as a
+//    quiet bar inside each option row instead.
+//
+// 3. Content is rendered through MathContent rather than
+//    dangerouslySetInnerHTML + JSXUtils.htmlDecode, so question and option HTML
+//    is DOMPurify-sanitised on the way in. These bodies are author-supplied, so
+//    unsanitised injection here was an XSS vector.
+
+const collapsibleTrigger = (label) => (
+    <div className='flex flex-row items-center w-full bg-gray-50 hover:bg-gray-100 px-4 py-3 rounded-lg transition-colors cursor-pointer'>
+        <div className={typography.h3 + " w-full"}>{label}</div>
+        <div className='flex justify-end text-gray-400'>
+            <AiOutlineDownSquare size={20} />
+        </div>
+    </div>
+);
 
 class SingleSelectMCQQuestion extends React.Component {
 
-    selectOption = (optionNumber) => {
-        this.props.updateQuestionAnswer(this.props.questionDetails.id, this.props.questionDetails.options[optionNumber-1].id);
+    selectOptionById = (optionId) => {
+        this.props.updateQuestionAnswer(this.props.questionDetails.id, optionId);
     }
 
-    renderOption = (optionName, text, bgColor, isOptionSelected) => {
-        return <button className="w-full text-left px-3 py-3 transition-colors text-gray-800">
-            <div className="flex flex-row items-center w-full">
-                <input type="radio" checked={isOptionSelected} readOnly className="accent-primary-600 w-4 h-4"/>
-                <div className={typography.label + " px-3"}>{optionName}</div>
-                <div className={typography.body}>
-                    <span dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(text)}}></span>
-                </div>
-            </div>
-        </button>
-    }
+    isReviewMode = () => this.props.submittedQuestionDetails != null;
 
-    showAccuracy = (i) => {
-        if(this.props.needCompletePreview === undefined || this.props.needCompletePreview == false) {
-            return <div></div>
+    /**
+     * Percentage of respondents per option, or null when unavailable.
+     *
+     * Keyed off the ids in `questionDetails.options` so a mismatch between the
+     * analytics keys and the option ids yields no distribution at all rather than
+     * a misattributed one. Silence is the correct failure mode for statistics.
+     */
+    getDistribution = () => {
+        if (this.props.needCompletePreview === undefined || this.props.needCompletePreview === false) {
+            return null;
         }
-        let totalResponseCount = this.props.totalResponseCount;
-        let optionResponsePercentage =
-                (this.props.optionIdToOptionResponseCount[this.props.options[i].optionId]*100)/(totalResponseCount);
-        return <div className='pl-3 py-1'>{isNaN(optionResponsePercentage)?"0%":optionResponsePercentage.toFixed(2) + "%"}</div>
+        const counts = this.props.optionIdToOptionResponseCount;
+        const total = this.props.totalResponseCount;
+        if (counts == null || !total || total <= 0) {
+            return null;
+        }
+        const options = this.props.questionDetails.options || [];
+        const distribution = {};
+        options.forEach((option) => {
+            const count = counts[option.id];
+            if (typeof count === 'number') {
+                distribution[option.id] = (count * 100) / total;
+            }
+        });
+        return Object.keys(distribution).length > 0 ? distribution : null;
     }
 
     getOptionsView = () => {
-        const StyledTableCell = styled(TableCell)({
-            padding: 0,
-          });
-        const StyledTableRow = styled(TableRow)({
-            padding: 0,
-          });
-        let optionsJSX = [];
-        let isQuestionPreviewPage = this.props.submittedQuestionDetails != null ;
-        this.props.questionDetails.options.forEach((option, index) => {
-            let isOptionSelected = this.props.selectedOptionId == option.id;
-            let isQuestionCorrect = (isQuestionPreviewPage && this.props.selectedOptionId == this.props.questionDetails.correctOptionId);
-            let rowBgClass = 'hover:bg-primary-50/50';
-            if (isQuestionPreviewPage && isOptionSelected) {
-                rowBgClass = isQuestionCorrect ? 'bg-success-50' : 'bg-danger-50';
-            } else if (!isQuestionPreviewPage && isOptionSelected) {
-                rowBgClass = 'bg-primary-50';
-            }
-            // question is selected.
-            optionsJSX.push(
-                <StyledTableRow key={option.id}>
-                    <div className={"flex w-full justify-start rounded-lg border border-gray-100 mb-1 transition-colors " + rowBgClass} onClick= {() => this.selectOption(index+1)}>
-                        {this.renderOption(index+1, option.text, null, isOptionSelected)}
-                    </div>
-                    <StyledTableCell>
-                        <div className='flex justify-start items-center'>
-                            {this.showAccuracy(index)}
-                            {isQuestionPreviewPage&&option.id==this.props.questionDetails.correctOptionId?<div className={typography.caption + ' pl-2 text-success-700 font-semibold'}>Correct</div>:""}
-                            {isQuestionPreviewPage && isOptionSelected && option.id!=this.props.questionDetails.correctOptionId?<div className={typography.caption + ' pl-2 text-danger-600 font-semibold'}>Incorrect</div>:""}
-                        </div>
-                    </StyledTableCell>
-                </StyledTableRow>
-            );
-        });
-
-     const data = [
-        ["Option", "Accuracy", { role: "style" }],
-        ["Option 1", 22.94, "red"], // RGB value
-        ["Option 2", 39.49, "green"], // English color name
-        ["Option 3", 31.3, "red"],
-        ["Option 4", 1.45, "red"], // CSS-style declaration
-        ["Option 5", 3.45, "red"], // CSS-style declaration
-    ];
-  
-    const options = {
-        bars: "horizontal",
-      };
-
-        return <div className='flex flex-row'>
-            <Table><TableBody>{optionsJSX}</TableBody></Table>
-            {isQuestionPreviewPage?
-                <div className='w-5/12'>
-                    <Chart className=''
-                        chartType="ColumnChart"
-                        width="w-full"
-                        height="h-full"
-                        data={data}
-                        options={options}
-                    />
-                    <div className={generalTextSize + " py-1"}>
-                        Percentage of students vs option selection
-                    </div>
-                </div>
-               :<div/> 
-            }
-        </div>
+        const reviewMode = this.isReviewMode();
+        return <OptionList
+            options={this.props.questionDetails.options}
+            selectedOptionId={this.props.selectedOptionId}
+            // The correct answer is only disclosed once the learner has submitted.
+            correctOptionId={reviewMode ? this.props.questionDetails.correctOptionId : null}
+            onSelect={this.selectOptionById}
+            reviewMode={reviewMode}
+            distribution={this.getDistribution()}
+            groupName={'answer-' + (this.props.questionDetails.id || 'question')}
+        />;
     }
 
-    showSelectedTags = () =>{
-        let response=[];
-        let tags=[]
-        tags= [...this.props.questionDetails.tags];
-        for(let i=0;i<tags.length;i++){
-            response.push(
-                <div className="flex flex-row" key={tags[i].id || i}>
-                    <div className="py-1">{JSXUtils.getTagViewJSX(tags[i].tagName)}</div>
-                </div>
-            )
+    /**
+     * Letter of the correct option, derived from the options array.
+     *
+     * The previous implementation read `questionDetails.correctOptions[0] + 1`,
+     * but the wire format has no `correctOptions` array -- it has a single
+     * `correctOptionId` string -- so that expression threw on any question that
+     * reached it. Deriving the index from the options list works for both the
+     * saved shape and the in-progress authoring shape.
+     */
+    getCorrectOptionLabel = () => {
+        const details = this.props.questionDetails;
+        const options = details.options || [];
+        let index = -1;
+        if (details.correctOptionId != null) {
+            index = options.findIndex((option) => option.id === details.correctOptionId);
         }
-        let solutionSectiontiggerContent = <div className='flex flex-row items-center w-full bg-gray-50 px-4 py-3 rounded-t-lg'>
-            <div className={typography.h3 + " w-full"}>
-                Tags on Question
-            </div>
-            <div className='flex justify-end text-gray-400'>
-                <AiOutlineDownSquare size={20}/>
-            </div>
-        </div>
-        return response.length == 0 ? <div/> : <div>
-            <Collapsible 
-                trigger={solutionSectiontiggerContent}
-                className = "border border-gray-100 rounded-lg mt-3 Collapsible__trigger">
-                <div className='bg-white px-4 py-3'>
-                    {response}
-                </div>
-            </Collapsible>
-        </div>
-    }
-
-    getAnswerpreview = () =>{
-        if(this.props.questionDetails.answerDescription == undefined){
-            return <div>
-                answer ::
-            </div>
+        if (index === -1 && Array.isArray(details.correctOptions) && details.correctOptions.length > 0) {
+            index = Number(details.correctOptions[0]);
         }
-        else{
-            return <div>
-                <div className="bg-success-600">
-                    answer:: 
-                </div>
-                <div>
-                    {this.props.questionDetails.answerDescription}
-                </div>
-                
-            </div>
+        if (index === -1 || Number.isNaN(index) || index < 0 || index >= options.length) {
+            return null;
         }
+        return String.fromCharCode(65 + index);
     }
 
     getAnswerDescriptionJSX = () => {
-        if(this.props.questionDetails.answerDescription == null || this.props.questionDetails.answerDescription< 2) {
-            return <div className='px-4 md:px-8 py-4 border-t border-gray-100'>
+        // Previously guarded on questionDetails.answerDescription but then rendered
+        // this.props.answerDescription, which is not a prop this component receives
+        // -- so the solution text never appeared even when the API returned one.
+        const description = this.props.questionDetails.answerDescription;
+        const hasDescription = typeof description === 'string' && description.trim().length > 0;
+        if (!hasDescription) {
+            return <div className='px-4 py-4 border-t border-gray-100'>
                 <p className={typography.caption}>
-                    Answer description is not yet updated by the problem author.
+                    No worked solution has been added for this question yet.
                 </p>
             </div>;
         }
-        return <div className='px-4 md:px-8 py-4 border-t border-gray-100'>
-            <div className={typography.body} dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(this.props.answerDescription)}}></div>
-        </div>
+        return <div className='px-4 py-4 border-t border-gray-100'>
+            <MathContent html={description} className='text-sm md:text-base text-gray-700' />
+        </div>;
     }
 
     getAdditionalPreview = () => {
-        let solutionSectiontiggerContent = <div className='flex flex-row items-center w-full bg-gray-50 px-4 py-3 rounded-t-lg'>
-            <div className={typography.h3 + " w-full"}>
-                Solution Section
-            </div>
-            <div className='flex justify-end text-gray-400'>
-                <AiOutlineDownSquare size={20}/>
-            </div>
-        </div>
-        return <div>
-                    <Collapsible 
-                        trigger={solutionSectiontiggerContent}
-                        className = "border border-gray-100 rounded-lg mt-3 Collapsible__trigger">
-                        <div className='px-4 md:px-8 py-3 bg-success-50 flex justify-center'>
-                            <span className={typography.body + ' font-medium'}>
-                                Correct option is: option {this.props.questionDetails.correctOptions[0] + 1}
+        const correctLabel = this.getCorrectOptionLabel();
+        return <div className='mt-4'>
+            <Collapsible trigger={collapsibleTrigger('Solution')} className="Collapsible__trigger">
+                <div className='border border-gray-100 border-t-0 rounded-b-lg overflow-hidden'>
+                    <div className='px-4 py-3 bg-success-50 flex items-center gap-2'>
+                        <span className={typography.label}>Correct answer</span>
+                        {correctLabel
+                            ? <span className='inline-flex items-center justify-center w-6 h-6 rounded-md bg-success-600 text-white text-xs font-bold'>
+                                {correctLabel}
                             </span>
-                        </div>
-                        {this.getAnswerDescriptionJSX()}
-                    </Collapsible>
+                            : <span className='text-sm text-gray-500'>not recorded</span>
+                        }
+                    </div>
+                    {this.getAnswerDescriptionJSX()}
                 </div>
+            </Collapsible>
+        </div>;
+    }
+
+    /**
+     * Classification, rendered from the parsed tag taxonomy rather than as a
+     * column of raw "Prefix : Value" strings.
+     */
+    showSelectedTags = () => {
+        const taxonomy = parseQuestionTaxonomy(this.props.questionDetails.tags);
+        const rows = [
+            ['Exam', taxonomy.exam],
+            ['Subject', taxonomy.subject],
+            ['Chapter', taxonomy.chapter],
+            ['Topic', taxonomy.topic],
+            ['Year', taxonomy.year],
+            ['Difficulty', taxonomy.difficulty],
+            ['Paper', taxonomy.paper],
+            ['Source', taxonomy.source],
+        ].filter((row) => row[1]);
+
+        if (rows.length === 0 && taxonomy.other.length === 0) {
+            return <div />;
+        }
+
+        return <div className='mt-4'>
+            <Collapsible trigger={collapsibleTrigger('Classification')} className="Collapsible__trigger">
+                <div className='border border-gray-100 border-t-0 rounded-b-lg bg-white px-4 py-3'>
+                    <dl className='grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2'>
+                        {rows.map(([label, value]) => (
+                            <div key={label} className='flex items-baseline justify-between gap-3 py-1 border-b border-gray-50'>
+                                <dt className={typography.label}>{label}</dt>
+                                <dd className='text-sm text-gray-800 text-right'>{value}</dd>
+                            </div>
+                        ))}
+                    </dl>
+                    {taxonomy.other.length > 0 &&
+                        <div className='flex flex-wrap gap-1.5 mt-3'>
+                            {taxonomy.other.map((tag) => (
+                                <Badge key={tag.id} variant="gray">{tag.label}</Badge>
+                            ))}
+                        </div>
+                    }
+                </div>
+            </Collapsible>
+        </div>;
     }
 
     render() {
-        if(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)){
-            return <SmallScreenSingleSelectMCQQuestion
-                questionDetails = {this.props.questionDetails}
-                selectedOptionId = {this.props.selectedOptionId}
-                updateQuestionAnswer = {this.props.updateQuestionAnswer}
-                selectedOptionBackgroundColor ={this.props.selectedOptionBackgroundColor}
-                needCompletePreview = {this.props.needCompletePreview}
-                optionIdToOptionResponseCount = {this.props.optionIdToOptionResponseCount}
-                totalResponseCount = {this.props.totalResponseCount}
-                submittedQuestionDetails = {this.props.submittedQuestionDetails}
-                options = {this.props.options}
-            />
-        }
-        if(this.props.questionDetails.isEditingQuestion==undefined){}
-        else{
-            return(
+        // NO USER-AGENT BRANCH.
+        //
+        // This used to delegate to SmallScreenSingleSelectMCQQuestion whenever the UA
+        // string matched a mobile device. Three problems with that:
+        //
+        //   a) It sniffed the device, not the viewport, so an iPad or a narrowed
+        //      desktop window got the wrong layout while a large Android tablet got
+        //      the phone one.
+        //   b) It forked the question renderer in two, and the mobile copy had
+        //      drifted: it reads `questionDetails.correctOption` (a field that does
+        //      not exist on the wire, so it printed "option NaN"), caps the tag
+        //      taxonomy at the first 5 prefixes out of 11, and renders unsanitised
+        //      HTML.
+        //   c) Every improvement had to be made twice, which is why it was not.
+        //
+        // This component is responsive by construction -- OptionList uses fluid
+        // padding and MathContent is width-agnostic -- so one implementation now
+        // serves every viewport and the fork is gone.
+
+        // Authoring preview path: the editor passes `isEditingQuestion`, and the
+        // stem lives on `questionDescription` rather than `description`.
+        if(this.props.questionDetails.isEditingQuestion !== undefined) {
+            return (
                 <div>
-                    <div className={typography.h2 + " px-4 md:px-6 py-4"}>
-                        <div dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(this.props.questionDetails.questionDescription)}}></div>
-                    </div>
+                    <MathContent
+                        html={this.props.questionDetails.questionDescription}
+                        className={typography.h2 + ' pb-4'}
+                    />
                     {this.getOptionsView()}
                     {this.getAdditionalPreview()}
                     {this.showSelectedTags()}
-                    
                 </div>
-            )
+            );
         }
         return (
             <div>
-                <div className={typography.h2 + " pb-4"}>
-                    <div dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(this.props.questionDetails.description)}}></div>
-                </div>
+                <MathContent
+                    html={this.props.questionDetails.description}
+                    className='text-base md:text-lg text-gray-900 pb-5 leading-relaxed'
+                />
                 <div className='w-full'>
                     {this.getOptionsView()}
                 </div>
