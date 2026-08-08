@@ -1,103 +1,305 @@
-# Getting Started with Create React App
+# EducationalBridge
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+EducationalBridge is a web platform for practicing JEE (Joint Entrance Exam)
+questions. It lets users browse and solve individual questions or full mock
+papers, track their performance, organize content into channels and tags, and
+(for authors) create and edit questions, papers, tags, and channels through an
+admin portal.
 
-## Available Scripts
+Live site: [www.educationalbridge.com](https://www.educationalbridge.com)
 
-In the project directory, you can run:
+This repository contains the **frontend only** — a React single-page
+application. It talks to a separate Spring Boot backend
+(`backend-master-main`, not part of this repo) backed by MongoDB.
 
-### `npm start`
+---
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Table of contents
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+- [Features](#features)
+- [Tech stack](#tech-stack)
+- [Project structure](#project-structure)
+- [Getting started](#getting-started)
+- [Available scripts](#available-scripts)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Design system / conventions](#design-system--conventions)
+- [Deployment](#deployment)
+- [SEO](#seo)
+- [Known issues / quirks](#known-issues--quirks)
+- [License](#license)
 
-### `npm test`
+---
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Features
 
-### `npm run build`
+- **Question bank** — browse, filter (by tag/channel/search), and solve
+  single-select MCQ questions, with LaTeX math rendering via KaTeX.
+- **Papers** — timed mock-test style papers made up of multiple questions,
+  with section-wise marking schemes.
+- **Channels** — topical groupings of questions (e.g. by subject).
+- **Tags** — free-form categorization (subject, topic, exam, difficulty,
+  year, etc.) used for filtering and search.
+- **Voting & comments** — upvote/downvote questions, threaded comments with
+  replies.
+- **User analytics** — per-question and per-paper score/accuracy analysis for
+  logged-in users, plus a history of solved questions/papers.
+- **Admin/authoring portal** — create and edit questions, papers, tags, and
+  channels, including a rich text editor (CKEditor/TinyMCE) with math input.
+- **Google Sign-In** — authentication via Google OAuth; no separate
+  username/password system.
+- **Ad rails** — reserved ad slots on wide viewports (desktop), never in the
+  main content column.
+- **Responsive** — distinct small-screen and large-screen layouts for the
+  header and several key views.
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Tech stack
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+| Layer | Choice |
+|---|---|
+| Framework | React 18 (bootstrapped with Create React App / `react-scripts`) |
+| Routing | React Router v6 |
+| State management | Redux + redux-thunk |
+| Styling | Tailwind CSS, plus MUI v4 (`@material-ui/core`) and MUI v5 (`@mui/material`) components in older/newer areas of the app respectively |
+| Rich text editing | CKEditor 5, TinyMCE (with WIRIS MathType plugins for equation input) |
+| Math rendering | KaTeX (`katex`), sanitized with DOMPurify |
+| Auth | `react-google-login` (Google Identity / OAuth) |
+| Charts | `react-google-charts` |
+| HTTP | Native `fetch` via small `*Receiver`/`*Connector` API client classes |
+| Hosting (production) | AWS Amplify Hosting, deployed from this GitHub repo |
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+The backend (separate repo) is Java 11 + Spring Boot 2, with MongoDB as the
+primary data store.
 
-### `npm run eject`
+## Project structure
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+```
+src/
+├── apis/              # Thin fetch() wrappers per resource (Questions, Papers, Tags, Channels, ...)
+├── components/common/ # Shared UI primitives (Button, Card, EmptyState, PageContainer, AdRail, MathContent, ...)
+├── constants/         # Design tokens, palette, host config, text-size classes
+├── js/
+│   ├── adminPortal/   # Authoring: question/paper/tag/channel creation & editing
+│   ├── channelSet/    # Channel browsing
+│   ├── coreCapabilities/ # Shared building blocks (popups, etc.)
+│   ├── header/        # App header (large-screen and small-screen variants)
+│   ├── paperSet/      # Paper listing, viewing, and submission
+│   └── questionSet/   # Question listing, viewing, and submission
+├── store/             # Redux store, actions, reducers
+├── utils/             # Cross-cutting helpers (HTML sanitizing/decoding, user details, misc)
+├── App.js             # Root component / layout shell
+├── route.js           # Route table
+└── index.js           # Entry point
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+Key shared conventions live in [`src/js/Convensions`](./src/js/Convensions) —
+read this before styling any new component.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## Getting started
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+### Prerequisites
 
-## Learn More
+- Node.js — `react-scripts@5` officially targets Node 14–18, but builds have
+  been verified working on Node 24 as well in this project
+- npm
+- A running instance of the backend API (see [Configuration](#configuration))
+  if you want real data instead of hitting a dead endpoint
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+### Install
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+```bash
+npm install
+```
 
-### Code Splitting
+> **Note:** this project depends on `@material-ui/core` (MUI v4), which
+> declares a peer dependency on React 16/17, while the project itself uses
+> React 18. This is a known, accepted conflict — it works fine in practice,
+> but `npm ci` (used in CI/Amplify builds) enforces peer dependencies more
+> strictly than `npm install`. The repo's `.npmrc` sets
+> `legacy-peer-deps=true` so both `npm install` and `npm ci` succeed without
+> extra flags. Don't remove that line.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+### Run locally
 
-### Analyzing the Bundle Size
+```bash
+npm start
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+Opens the app at [http://localhost:3000](http://localhost:3000). By default
+(`src/constants/hostConfig.js`) it points at `https://api.educationalbridge.com/`; see
+[Configuration](#configuration) to point it at a local backend instead.
 
-### Making a Progressive Web App
+### Build for production
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+```bash
+npm run build
+```
 
-### Advanced Configuration
+Outputs static files to `build/`. This is what Amplify runs automatically on
+every push to `main`.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+## Available scripts
 
-### Deployment
+| Command | Description |
+|---|---|
+| `npm start` | Runs the app in development mode with hot reload |
+| `npm run build` | Builds an optimized production bundle to `build/` |
+| `npm test` | Runs the test runner in interactive watch mode |
+| `npm run eject` | Ejects from `react-scripts` (one-way; not recommended) |
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+## Configuration
 
-### `npm run build` fails to minify
+All environment-specific configuration lives in
+[`src/constants/hostConfig.js`](./src/constants/hostConfig.js):
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+```js
+export const currentHost = "https://api.educationalbridge.com/";       // backend API base URL
+export const currentURLHost = "https://www.educationalbridge.com/";    // frontend's own base URL (used for building links)
+export const currentGoogleLoginAPIKey = "...";                          // Google OAuth client ID
+```
 
+To develop against a local backend, comment out the production block and
+uncomment the local-dev block already present in that file (both `currentHost`
+and `currentURLHost` pointing at `localhost`).
 
-SEO tutorial :  
-SEO Results : https://search.google.com/search-console/index?resource_id=https%3A%2F%2Fwww.educationalbridge.com%2F
-New registration : https://search.google.com/search-console/welcome
+This is a plain JS constants file, not a `.env`-driven config — there is no
+`.env` file to create. If you need per-environment secrets in the future,
+prefer CRA's built-in `.env`/`.env.local` support over hardcoding here, and
+make sure any new `.env*` file is covered by `.gitignore` (already the case
+for `.env.local` and friends).
 
+The Google OAuth client ID above is not a secret — client IDs are meant to be
+embedded in client-side code. Nothing else in this repo requires a secret at
+build time; the backend holds its own credentials (e.g. the MongoDB
+connection string) separately and is out of scope for this repo.
 
+## Architecture
 
-connecting to ssh :
-=========
-cd ~/Downloads/
-ssh -i "frontend_ec2_key_pair.pem" ubuntu@ec2-65-0-93-113.ap-south-1.compute.amazonaws.com
+```
+┌─────────────────────┐        HTTPS         ┌──────────────────────────┐        TLS        ┌─────────────────┐
+│   AWS Amplify        │ ───────────────────▶ │  EC2 (Nginx + Spring     │ ────────────────▶ │  MongoDB Atlas   │
+│   (this repo)         │   api.educational-   │  Boot backend jar)      │                    │  (managed DB)    │
+│   www.educational-    │   bridge.com          │  api.educationalbridge  │                    │                  │
+│   bridge.com          │                       │  .com                   │                    │                  │
+└─────────────────────┘                        └──────────────────────────┘                    └─────────────────┘
+```
 
+- **Frontend (this repo)** is a static React SPA. It is built and hosted by
+  **AWS Amplify Hosting**, which watches this GitHub repository and
+  auto-builds/deploys on every push to `main`. Amplify also terminates HTTPS
+  and serves the app over its own CDN.
+- **Backend** is a separate Spring Boot application running on a single EC2
+  instance, reverse-proxied through Nginx, with its own subdomain
+  (`api.educationalbridge.com`) and its own Let's Encrypt certificate.
+  Frontend and backend are different origins, so the backend has CORS
+  configured to allow requests from the Amplify/production domains.
+- **Database** is MongoDB Atlas (a managed cluster), reached only from the
+  backend's EC2 instance (its IP is allow-listed in Atlas's network access
+  rules — nothing else can reach the database directly).
+- There is an Express-based SSR entry point (`server.js`) in this repo from
+  an earlier iteration of the project. It is **not** part of the current
+  deployment path — production serves the CRA static build directly through
+  Amplify. It's kept for reference but can be considered legacy/unused unless
+  SSR is revisited.
 
-Deploying on prod :
-==============================
-1. push changes
-2. increase instance type.
-3. ssh to instance and run below
-    a. sudo su -
-    b. npm install, npm run build
-4. decrease instance type
-5. change instance type
-6. sudo su - , change ip in route 53 and /etc/nginx/site-availability/default, sudo systemctl restart nginx, node server/index.js
+### Data model (backend, for context)
 
+The backend persists these main MongoDB collections (all consumed by this
+frontend through the `src/apis/*` client classes):
 
-How to do mobile friendly test
+- `questionDTO` — individual questions (description, options, correct
+  answer, tags, votes, comments)
+- `tagNameDTO` — tag definitions
+- `channelDTO` — channel definitions
+- `paperDTO` — paper definitions (sections, marking scheme, question refs)
+- `questionSubmissionResponseDTO` / `paperSubmissionResponseDTO` — a user's
+  answers to a question/paper
+- `questionAnalyticsDTO` / `userQuestionAnalyticsDTO` /
+  `paperScoreAnalysisDTO` — aggregate and per-user performance stats
+- `voteDTO` — upvote/downvote records
+- `googleLoginDetailsDTO` — cached Google profile info for logged-in users
 
+A large share of the question bank was seeded from a licensed third-party
+JEE question data set; see the backend repo's `tools/import_jee_questions.py`
+for the import pipeline and licensing notes if you need to understand
+provenance of any specific question's content.
 
+## Design system / conventions
 
+Read [`src/js/Convensions`](./src/js/Convensions) in full before touching UI
+code. Summary of the load-bearing rules:
 
-How to pull data from testbook ?
-Copy response of student-test-result api
+- **Colors** come only from the token palette in
+  [`src/constants/palette.js`](./src/constants/palette.js) — `primary-*`,
+  `gray-*` (a slate scale), `success-*`, `danger-*`, `warning-*`. Never use
+  Tailwind's default color families (`blue-*`, `red-*`, `green-*`, etc.)
+  directly.
+- **Page gutter**: every page body and the header both use
+  `layout.container` from
+  [`src/constants/designTokens.js`](./src/constants/designTokens.js), so
+  left/right edges line up across the whole app.
+- **Advertising**: ad units only ever render in the left/right rails
+  (`components/common/AdRail`), gated to `xl`+ breakpoints, never inside the
+  main content column.
+- **Rich text from the API** (question bodies, options, solutions, comments)
+  must always be rendered through `MathContent` /
+  `JSXUtils.htmlDecode` — this sanitizes the HTML and typesets any `$$...$$`
+  LaTeX via KaTeX. Never `dangerously-set-html-content` raw API strings
+  directly.
+- **Shared primitives**: prefer `src/components/common/*` (`Button`, `Card`,
+  `EmptyState`, `PageContainer`, `MathContent`) over hand-rolled styling.
+- **`tailwind.config.js`**: any custom scale (colors, spacing, z-index, etc.)
+  must go inside `theme.extend`. Putting it at the `theme` root replaces
+  Tailwind's own defaults and silently breaks standard classes like
+  `max-w-7xl` or `z-50` app-wide — this has happened before in this repo's
+  history.
+
+## Deployment
+
+Production deploys are fully automatic:
+
+1. Push (or merge) to the `main` branch on GitHub.
+2. AWS Amplify's webhook picks up the push, runs `npm ci` (with
+   `legacy-peer-deps=true` from `.npmrc`) then `npm run build`.
+3. Amplify deploys the resulting `build/` output to its CDN.
+
+There is no manual deploy step and no separate staging branch at present —
+everything pushed to `main` goes live. Review changes before merging to
+`main` accordingly.
+
+The backend is deployed separately (SSH + systemd on its EC2 instance) and is
+not affected by pushes to this repo.
+
+## SEO
+
+- Google Search Console is set up for `https://www.educationalbridge.com/`.
+- `public/robots.txt` intentionally disallows crawling of individual
+  question/paper detail and submission pages (the question bank includes
+  licensed third-party content that should not be publicly indexed
+  verbatim), while allowing the listing/browse pages.
+- `public/sitemap.txt` lists the crawlable top-level pages.
+
+## Known issues / quirks
+
+- **`server.js` / `server/index.js`** (Express + `react-dom/server` SSR) are
+  leftover from a prior architecture and are not used in the current Amplify
+  deployment. Don't assume they're wired into CI.
+- **Mixed MUI versions**: both `@material-ui/core` (v4) and `@mui/material`
+  (v5) are dependencies. Newer components should use v5 (`@mui/*`); v4 is
+  only kept for existing components that haven't been migrated yet.
+- **`npm ci` requires `legacy-peer-deps=true`** (see [Getting
+  started](#getting-started)) — do not remove this from `.npmrc` without
+  first resolving the underlying MUI v4/React 18 peer dependency conflict.
+- The custom apex domain (`educationalbridge.com` without `www`) is not
+  currently wired to Amplify due to DNS/CloudFront alias limitations at the
+  zone apex; `www.educationalbridge.com` is the canonical URL for now.
+
+## License
+
+[MIT](./LICENSE) — see the LICENSE file for the full text. You are free to
+use, copy, modify, and distribute this code, including commercially, provided
+the copyright notice is preserved.
+
+Note: this license covers the code in this repository. It does not extend to
+third-party content served through the application (e.g. licensed question
+data), which may carry its own restrictions.
