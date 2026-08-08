@@ -1,0 +1,88 @@
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* surface.page in src/constants/palette.js */
+  background-color: #F8FAFC;
+  color: #0F172A;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Question / solution / comment bodies rendered via MathContent.
+   Scraped content contains full-size CDN diagrams and raw tables, both of which
+   overflow their container unless constrained. */
+.math-content {
+  line-height: 1.7;
+  overflow-wrap: break-word;
+}
+.math-content img {
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0.35rem 0;
+}
+.math-content p {
+  margin: 0 0 0.6rem 0;
+}
+.math-content p:last-child {
+  margin-bottom: 0;
+}
+.math-content table {
+  border-collapse: collapse;
+  margin: 0.6rem 0;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+.math-content td,
+.math-content th {
+  border: 1px solid #E2E8F0;
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+}
+.math-content a {
+  color: #2563EB;
+  text-decoration: underline;
+}
+
+/* KaTeX renders inline here (the source uses $$ for inline maths), so keep it
+   from inflating line height, and let long expressions scroll rather than
+   overflow on narrow screens. */
+.math-content .katex {
+  font-size: 1.05em;
+}
+.math-content .katex-display {
+  margin: 0.5rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* List/preview variant of .math-content. Question bodies are full HTML and many
+   contain diagrams, so an unclamped row can be hundreds of pixels tall and the
+   list stops being scannable. Clamp to a few lines and cap inline images. */
+.math-content--preview {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.6;
+}
+.math-content--preview img {
+  max-height: 3rem;
+  width: auto;
+}
+.math-content--preview table {
+  display: none; /* tables never preview usefully in a single row */
+}
+.math-content--preview p {
+  margin: 0;
+  display: inline;
+}

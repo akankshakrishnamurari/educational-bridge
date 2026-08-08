@@ -1,0 +1,17 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+
+# Individual question pages are intentionally not crawlable: the question bank is
+# third-party licensed content and should not be indexed. The topic-analysis and
+# listing pages are ours and are open to crawlers.
+Disallow: /question/view
+Disallow: /question/upsert
+Disallow: /question/submission/view
+Disallow: /paper/submission/view
+Disallow: /paper/new
+Disallow: /tags/new
+Disallow: /channel/new
+Disallow: /questions/instances/me
+Disallow: /papers/instances/me
+
+Sitemap: https://www.educationalbridge.com/sitemap.txt

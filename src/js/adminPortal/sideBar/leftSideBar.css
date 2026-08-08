@@ -1,0 +1,14 @@
+.leftSideBar {
+    width: 20%;
+    padding: 20px;
+    /* was #fa0000 (debug red) */
+    background-color: #FFFFFF;
+    border-right: 1px solid #E2E8F0; /* gray-200 */
+    position: fixed;
+    top: 50px;
+    left: 0;
+    bottom: 0;
+  }
+  .main-content {
+    margin-left: 20%;
+  }
