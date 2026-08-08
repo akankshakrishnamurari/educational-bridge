@@ -7,7 +7,9 @@ import { currentURLHost } from '../constants/hostConfig';
 import { UserDetailsUtil } from '../utils/UserDetailsUtil';
 import QuestionsReceiver from '../apis/QuestionsReceiver';
 import ChannelReceiver from '../apis/ChannelReceiver';
-import { HiOutlineAcademicCap, HiOutlineSparkles } from 'react-icons/hi';
+import Avatar from '../components/common/Avatar';
+import { contributors } from '../constants/contributors';
+import { HiOutlineAcademicCap, HiOutlineSparkles, HiOutlineHeart } from 'react-icons/hi';
 import { BsPencilSquare, BsCollectionPlay, BsFileEarmarkText } from 'react-icons/bs';
 import {
     AiOutlinePlayCircle,
@@ -138,7 +140,7 @@ class Home extends React.Component {
                 <div className={layout.marketing + ' py-16 md:py-24'}>
                     <div className="grid lg:grid-cols-12 gap-12 lg:gap-16 items-center">
                         <div className="lg:col-span-7">
-                            <Badge variant="warning">Beta &middot; free while we build</Badge>
+                            <Badge variant="warning">Beta &middot; non-profit &middot; free to use</Badge>
                             <h1 className="mt-5 text-4xl md:text-5xl lg:text-[3.4rem] font-extrabold tracking-tight text-gray-900 leading-[1.06]">
                                 The classroom moved online.
                                 <span className="text-primary-600"> The exam room never did.</span>
@@ -425,6 +427,164 @@ class Home extends React.Component {
         );
     }
 
+    // ----------------------------------------------------------- mission
+
+    getMissionSection = () => {
+        return (
+            <div className="bg-primary-600">
+                <div className={layout.marketing + ' py-16 md:py-20'}>
+                    <div className="grid lg:grid-cols-12 gap-10 lg:gap-16 items-start">
+                        <div className="lg:col-span-7">
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-500 text-white text-xs font-semibold uppercase tracking-wide">
+                                <HiOutlineHeart size={14} />
+                                Not for profit
+                            </div>
+                            <h2 className="mt-5 text-3xl md:text-4xl font-extrabold tracking-tight text-white leading-tight">
+                                Free, and staying that way.
+                            </h2>
+                            <p className="mt-5 text-lg text-primary-50 leading-relaxed">
+                                EducationalBridge is run as a non-profit effort, not a business. No paywall
+                                on practice, no subscription to see a solution, no plan to add one later.
+                                The students who need this most are the least able to pay for it, and
+                                charging them would defeat the entire point.
+                            </p>
+                        </div>
+                        <div className="lg:col-span-5 grid sm:grid-cols-1 gap-4">
+                            {[
+                                { title: 'No paywall', body: 'Every question, paper, and solution is free to everyone, signed in or not.' },
+                                { title: 'Built around day jobs', body: 'Everyone here contributes in their own time. Nobody draws a salary from it.' },
+                                { title: 'Open to contributors', body: 'Any teacher can publish. The bank grows because people give material away.' },
+                            ].map((item, index) => (
+                                <div key={index} className="rounded-xl bg-primary-700 p-4">
+                                    <div className="text-base font-semibold text-white">{item.title}</div>
+                                    <div className="mt-1 text-sm text-primary-100 leading-relaxed">{item.body}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ------------------------------------------------------- contributors
+
+    getLeadContributorCard = (person) => {
+        return (
+            <div className="rounded-2xl border border-primary-200 bg-gradient-to-br from-primary-50 via-white to-white p-7 md:p-9">
+                <div className="flex flex-col sm:flex-row gap-6">
+                    <Avatar src={person.image} name={person.name} size="xl" />
+                    <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-2xl font-extrabold tracking-tight text-gray-900">
+                                {person.name}
+                            </h3>
+                            <Badge variant="neutral">{person.role}</Badge>
+                        </div>
+                        <div className="mt-1 text-sm font-medium text-gray-700">{person.headline}</div>
+                        <div className={typography.caption + ' mt-0.5'}>{person.credentials}</div>
+                        <p className="mt-4 text-base text-gray-600 leading-relaxed">{person.bio}</p>
+                        <div className="mt-5 flex flex-wrap gap-2">
+                            {person.focus.map((item, index) => (
+                                <span
+                                    key={index}
+                                    className="px-2.5 py-1 rounded-md bg-white border border-primary-200 text-xs font-medium text-primary-700"
+                                >
+                                    {item}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    getContributorCard = (person, key) => {
+        return (
+            <div key={key} className="rounded-2xl border border-gray-200 bg-white p-6 flex flex-col">
+                <div className="flex items-start gap-4">
+                    <Avatar src={person.image} name={person.name} size="md" />
+                    <div className="min-w-0">
+                        <div className="text-lg font-bold text-gray-900">{person.name}</div>
+                        <div className="text-xs font-semibold text-primary-600 uppercase tracking-wide mt-0.5">
+                            {person.role}
+                        </div>
+                    </div>
+                </div>
+                <div className="mt-4 text-sm font-medium text-gray-700">{person.headline}</div>
+                <div className={typography.caption + ' mt-0.5'}>{person.credentials}</div>
+                <p className="mt-3 text-sm text-gray-600 leading-relaxed flex-1">{person.bio}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                    {person.focus.map((item, index) => (
+                        <span
+                            key={index}
+                            className="px-2.5 py-1 rounded-md bg-gray-100 text-xs font-medium text-gray-600"
+                        >
+                            {item}
+                        </span>
+                    ))}
+                </div>
+                {person.links.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-x-4 gap-y-1">
+                        {person.links.map((link, index) => (
+                            <a
+                                key={index}
+                                href={link.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-semibold text-primary-600 hover:text-primary-700 hover:underline"
+                            >
+                                {link.label}
+                            </a>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    getContributorsSection = () => {
+        const lead = contributors.find((person) => person.lead);
+        const others = contributors.filter((person) => !person.lead);
+        return (
+            <div className={layout.marketing + ' py-16 md:py-20'}>
+                <div className="max-w-3xl">
+                    <div className={EYEBROW}>The people behind it</div>
+                    <h2 className="mt-3 text-3xl md:text-4xl font-extrabold tracking-tight text-gray-900 leading-tight">
+                        Built by people who needed it to exist.
+                    </h2>
+                    <p className="mt-4 text-lg text-gray-600 leading-relaxed">
+                        A small group working on this around full-time jobs, because the version of this
+                        platform we wish we'd had as students was never going to build itself.
+                    </p>
+                </div>
+                {lead && <div className="mt-12">{this.getLeadContributorCard(lead)}</div>}
+                <div className="mt-6 grid md:grid-cols-2 gap-6">
+                    {others.map((person, index) => this.getContributorCard(person, index))}
+                </div>
+                <div className="mt-8 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <div className="text-base font-semibold text-gray-900">
+                            Want your name on this list?
+                        </div>
+                        <div className="mt-1 text-sm text-gray-600">
+                            Publishing a question is the whole contribution. There's no application.
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-gray-900 text-white hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
+                        onClick={() => this.goTo('question/upsert')}
+                    >
+                        Contribute a question
+                        <AiOutlineArrowRight size={15} />
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     // ----------------------------------------------------------- roadmap
 
     getRoadmapSection = () => {
@@ -577,6 +737,8 @@ class Home extends React.Component {
                 {this.getChannelsSection()}
                 {this.getDirectorySection()}
                 {this.getRoadmapSection()}
+                {this.getMissionSection()}
+                {this.getContributorsSection()}
                 {this.getFinalCtaSection()}
             </div>
         );
