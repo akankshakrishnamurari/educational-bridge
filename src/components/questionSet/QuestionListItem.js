@@ -47,8 +47,19 @@ const QuestionListItem = ({
     const accentKey = subjectAccent(taxonomy.subject);
     const tone = accent(accentKey);
 
-    const hasSolution = typeof question.answerDescription === 'string'
-        && question.answerDescription.trim().length > 0;
+    // The API now reports this as a boolean. It used to be inferred from the presence
+    // of `answerDescription`, which meant the full worked solution for every row on
+    // the page had to be downloaded so this one indicator could be drawn — and it put
+    // the answer to 25 questions in the network response of a page where nobody has
+    // answered anything yet. The server strips the answer from browse responses and
+    // sends `hasSolution` instead.
+    //
+    // The old inference is kept as a fallback so the badge still works against a
+    // backend that predates the change.
+    const hasSolution = typeof question.hasSolution === 'boolean'
+        ? question.hasSolution
+        : (typeof question.answerDescription === 'string'
+            && question.answerDescription.trim().length > 0);
 
     const optionCount = Array.isArray(question.options) ? question.options.length : 0;
 

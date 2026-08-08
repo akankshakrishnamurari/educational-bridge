@@ -7,7 +7,7 @@ import QuestionsReceiver from "../../../apis/QuestionsReceiver";
 import NewQuestionTagComponent from "./NewQuestionTagComponent";
 import EducationalBridgeHeader from '../../header/EducationalBridgeHeader';
 import {currentURLHost} from './../../../constants/hostConfig';
-import SingleSelectMCQQuestion from '../../questionSet/largeScreen/SingleSelectMCQQuestion';
+import QuestionBody from '../../questionSet/largeScreen/QuestionBody';
 import ClipLoader from "react-spinners/ClipLoader";
 import {UserDetailsUtil} from "../../../utils/UserDetailsUtil";
 import notify from '../../../utils/notify';
@@ -91,7 +91,10 @@ class QuestionCreation extends React.Component {
             });
             return;
         }
-        QuestionsReceiver.getQuestion(questionId).then(questionData=>{
+        // The editor needs the correct answer and the worked solution, which plain
+        // getQuestion no longer returns — that call feeds the solve page, where the
+        // answer must not be present. See QuestionsReceiver.getQuestionForEditing.
+        QuestionsReceiver.getQuestionForEditing(questionId).then(questionData=>{
             if (questionData == null || questionData.data == null) {
                 notify.error('Could not load that question.');
                 return;
@@ -241,7 +244,7 @@ class QuestionCreation extends React.Component {
             </div>
             <div className="p-4 md:p-5">
                 {hasContent
-                    ? <SingleSelectMCQQuestion
+                    ? <QuestionBody
                         questionDetails={details}
                         selectedOptionId={null}
                         updateQuestionAnswer={() => {}}

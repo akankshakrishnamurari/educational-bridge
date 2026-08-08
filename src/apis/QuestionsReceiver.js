@@ -46,24 +46,63 @@ class QuestionsReceiver {
         return requestJson('QuestionsReceiver.getQuestionsByQuestionIds', url);
     }
 
-    static getQuestion = async (questionId) => requestJson(
+    /**
+     * `user_id` is optional and only decides whether the response reports that THIS
+     * reader has already upvoted or downvoted the question. The backend previously
+     * took no user at all here and computed those flags from the question's own
+     * author, so every reader saw the author's votes reflected in the vote controls.
+     */
+    static getQuestion = async (questionId, userId) => requestJson(
         'QuestionsReceiver.getQuestion',
         currentHost + 'question?question_id=' + encode(questionId)
-    )
+            + (userId ? '&user_id=' + encode(userId) : '')
+    );
+
+    /**
+     * Full question INCLUDING the correct answer and worked solution, for loading into
+     * the authoring editor. `getQuestion` above no longer returns those fields, because
+     * it is what the solve page calls to show someone a question they have not yet
+     * attempted — and it was handing over the answer with it.
+     *
+     * Falls back to the old endpoint when /question/edit is absent, so this can ship
+     * without waiting on the backend. The backend is deployed by hand to EC2 while the
+     * frontend auto-deploys from a push, so the two are never simultaneous; without the
+     * fallback, editing a question would 404 in the window between them. The fallback
+     * can be deleted once the backend carrying /question/edit is live.
+     */
+    static getQuestionForEditing = async (questionId) => {
+        const response = await requestJson(
+            'QuestionsReceiver.getQuestionForEditing',
+            currentHost + 'question/edit?question_id=' + encode(questionId)
+        );
+        if (response !== null) {
+            return response;
+        }
+        return requestJson(
+            'QuestionsReceiver.getQuestionForEditing.fallback',
+            currentHost + 'question?question_id=' + encode(questionId)
+        );
+    }
 
     static getSubmittedQuestion = async (responseId) => requestJson(
         'QuestionsReceiver.getSubmittedQuestion',
         currentHost + 'question/submission?response_id=' + encode(responseId)
     )
 
-    static submitQuestionResponse = async (questionId, selectedOptionId, questionRequestTime) => {
+    /**
+     * @param questionType optional; when 'NUMERICAL' the answer is sent as the
+     *        `answer` parameter instead of `option_id`, since a typed number is not
+     *        an option id. The backend accepts either.
+     */
+    static submitQuestionResponse = async (questionId, selectedOptionId, questionRequestTime, questionType) => {
         // The `user_email` parameter carries a Google id, not an email. That is a
         // backend naming problem; the value has to stay as-is because submissions
         // are stored against it. A dead local `userEmail` was being computed from
         // sessionStorage here and then discarded.
         const userId = UserDetailsUtil.getUserGoogleId();
+        const answerParam = questionType === 'NUMERICAL' ? 'answer' : 'option_id';
         const url = currentHost + 'question/submit?question_id=' + encode(questionId)
-            + '&option_id=' + encode(selectedOptionId)
+            + '&' + answerParam + '=' + encode(selectedOptionId)
             + '&user_email=' + encode(userId)
             + '&question_request_time=' + encode(questionRequestTime);
         return postJson('QuestionsReceiver.submitQuestionResponse', url);

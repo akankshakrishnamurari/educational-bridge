@@ -2,7 +2,8 @@ import React from 'react';
 import QuestionsReceiver from "../../apis/QuestionsReceiver"
 import { connect } from 'react-redux';
 import {updateSubmittedQuestionDetails} from '../../store/actions/solgressAction';
-import SingleSelectMCQQuestion from './largeScreen/SingleSelectMCQQuestion';
+import QuestionBody from './largeScreen/QuestionBody';
+import { isNumericalAnswerCorrect } from '../../components/questionSet/NumericalAnswerInput';
 import { currentURLHost } from './../../constants/hostConfig';
 import EducationalBridgeHeader from '../../js/header/EducationalBridgeHeader';
 import { UserDetailsUtil } from '../../utils/UserDetailsUtil';
@@ -35,7 +36,7 @@ import ErrorState from '../../components/common/ErrorState';
 //   3. Its container used `pr-4 sm:pr-6 lg:pr-8`: right padding only, no left, so
 //      the content sat visibly off-centre against every other page.
 //
-// It still uses SingleSelectMCQQuestion for the question body (which handles review
+// It still uses QuestionBody for the question body (which handles review
 // mode and the real per-option response distribution), but no longer routes through
 // SingleSelectMCQPreview -- that component remains in use by four authoring
 // surfaces and carries their conventions, not a learner's.
@@ -114,19 +115,41 @@ class GeneralQuestionSubmissionView extends React.Component {
 
     isCorrect = () => {
         const details = this.props.submittedQuestionDetails;
+        const question = details.questionData;
         const selected = details.selectedOptionId;
-        const correct = details.questionData ? details.questionData.correctOptionId : null;
-        if (selected == null || correct == null) {
+        if (selected == null || question == null) {
+            return null;
+        }
+        // A NUMERICAL answer is a value, not an option id: "4" and "4.0" are the
+        // same answer, so comparing the strings would report a correct answer as
+        // wrong. Mirrors AnswerEvaluator on the backend.
+        if (question.questionType === 'NUMERICAL') {
+            if (question.correctAnswer == null) {
+                return null;
+            }
+            return isNumericalAnswerCorrect(
+                question.correctAnswer, selected, question.answerTolerance);
+        }
+        const correct = question.correctOptionId;
+        if (correct == null) {
             return null;
         }
         return String(selected) === String(correct);
     }
 
+    /**
+     * How to name the correct answer in the verdict. An MCQ has an option letter;
+     * a numerical question has only the value itself.
+     */
     getCorrectOptionLetter = () => {
         const details = this.props.submittedQuestionDetails;
-        const options = (details.questionData && details.questionData.options) || [];
+        const question = details.questionData;
+        if (question == null || question.questionType === 'NUMERICAL') {
+            return null;
+        }
+        const options = question.options || [];
         const index = options.findIndex(
-            (option) => String(option.id) === String(details.questionData.correctOptionId)
+            (option) => String(option.id) === String(question.correctOptionId)
         );
         return index === -1 ? null : String.fromCharCode(65 + index);
     }
@@ -138,6 +161,12 @@ class GeneralQuestionSubmissionView extends React.Component {
     getVerdictJSX = () => {
         const correct = this.isCorrect();
         const letter = this.getCorrectOptionLetter();
+        // A numerical question has no option letter, so name the value instead of
+        // falling back to a verdict that never says what the answer was.
+        const question = this.props.submittedQuestionDetails.questionData;
+        const expectedValue = (question && question.questionType === 'NUMERICAL')
+            ? question.correctAnswer
+            : null;
         if (correct === null) {
             return <div />;
         }
@@ -162,7 +191,9 @@ class GeneralQuestionSubmissionView extends React.Component {
                         ? 'Well done. The full working is below.'
                         : (letter
                             ? <>The correct answer was option <span className="font-semibold text-gray-900">{letter}</span>. Read the working below before moving on.</>
-                            : 'Read the working below before moving on.')
+                            : (expectedValue != null
+                                ? <>The correct answer was <span className="font-semibold text-gray-900 tabular-nums">{expectedValue}</span>. Read the working below before moving on.</>
+                                : 'Read the working below before moving on.'))
                     }
                 </p>
             </div>
@@ -500,7 +531,7 @@ class GeneralQuestionSubmissionView extends React.Component {
                         {this.getVerdictJSX()}
 
                         <section className="mt-5 bg-white rounded-xl shadow-sm border border-gray-100 p-5 md:p-7">
-                            <SingleSelectMCQQuestion
+                            <QuestionBody
                                 questionDetails = {details.questionData}
                                 selectedOptionId = {details.selectedOptionId}
                                 updateQuestionAnswer = {this.doNothing}

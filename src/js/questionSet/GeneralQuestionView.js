@@ -2,7 +2,7 @@ import React from 'react';
 import QuestionsReceiver from '../../apis/QuestionsReceiver';
 import { connect } from 'react-redux';
 import { updateQuestionDetails, updateQuestionComments } from '../../store/actions/solgressAction';
-import SingleSelectMCQQuestion from '../questionSet/largeScreen/SingleSelectMCQQuestion';
+import QuestionBody from '../questionSet/largeScreen/QuestionBody';
 import { Helmet } from 'react-helmet';
 import { currentURLHost } from '../../constants/hostConfig';
 import QuestionComment from './QuestionComment';
@@ -57,6 +57,24 @@ const isTypingTarget = (target) => {
         || tag === 'textarea'
         || tag === 'select'
         || target.isContentEditable === true;
+};
+
+/**
+ * Whether the learner has entered something submittable.
+ *
+ * A NUMERICAL answer is a typed string, so it can be present but empty -- and an
+ * empty string is not an answer. A `!= null` check alone would enable the submit
+ * button as soon as the learner typed and then cleared the field.
+ */
+const hasAnswer = (details) => {
+    if (!details) {
+        return false;
+    }
+    const answer = details.selectedOptionId;
+    if (answer == null) {
+        return false;
+    }
+    return String(answer).trim().length > 0;
 };
 
 class GeneralQuestionView extends React.Component {
@@ -123,7 +141,10 @@ class GeneralQuestionView extends React.Component {
         }
         this.setState({ status: 'loading' });
 
-        QuestionsReceiver.getQuestion(questionId).then((response) => {
+        // The user id decides whether the response reports that THIS reader has
+        // already voted on the question. The backend used to derive those flags from
+        // the question's author instead, so everyone saw the author's votes.
+        QuestionsReceiver.getQuestion(questionId, UserDetailsUtil.getUserGoogleId()).then((response) => {
             const data = dataOf(response);
             if (data === null) {
                 this.setState({ status: 'error' });
@@ -215,10 +236,17 @@ class GeneralQuestionView extends React.Component {
         const options = details.options || [];
 
         if (event.key === 'Enter') {
-            if (details.selectedOptionId != null && !this.state.isSubmitting) {
+            if (hasAnswer(details) && !this.state.isSubmitting) {
                 event.preventDefault();
                 this.submitQuestionResponse();
             }
+            return;
+        }
+
+        // A NUMERICAL question has no options to index into, and its digits belong
+        // in the answer field rather than to an option shortcut. Enter still
+        // submits, handled above.
+        if (details.questionType === 'NUMERICAL') {
             return;
         }
 
@@ -370,15 +398,16 @@ class GeneralQuestionView extends React.Component {
             return;
         }
         const details = this.props.questionDetails;
-        if (!details || details.selectedOptionId == null || this.state.isSubmitting) {
+        if (!details || !hasAnswer(details) || this.state.isSubmitting) {
             return;
         }
         this.setState({ isSubmitting: true });
         const questionId = details.id;
-        const selectedOptionId = details.selectedOptionId;
+        const selectedOptionId = String(details.selectedOptionId).trim();
         const questionRequestTime = details.requestTime;
 
-        QuestionsReceiver.submitQuestionResponse(questionId, selectedOptionId, questionRequestTime)
+        QuestionsReceiver.submitQuestionResponse(
+            questionId, selectedOptionId, questionRequestTime, details.questionType)
             .then((response) => {
                 const data = dataOf(response);
                 // Submit used to navigate straight to `response.data.responseId`. On
@@ -559,13 +588,16 @@ class GeneralQuestionView extends React.Component {
      */
     getActionBarJSX = () => {
         const details = this.props.questionDetails;
-        const hasSelection = details && details.selectedOptionId != null;
+        const hasSelection = hasAnswer(details);
+        const isNumerical = details && details.questionType === 'NUMERICAL';
         const eliminatedCount = this.state.eliminatedIds.length;
         return <div className='fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-gray-200'>
             <div className={layout.container + ' py-3 flex items-center justify-between gap-4'}>
                 <div className='flex items-center gap-4 min-w-0'>
                     <p className='text-sm text-gray-500 truncate'>
-                        {hasSelection ? 'Answer selected' : 'Select an option to continue'}
+                        {hasSelection
+                            ? 'Answer entered'
+                            : (isNumerical ? 'Enter your answer to continue' : 'Select an option to continue')}
                     </p>
                     {eliminatedCount > 0 &&
                         <span className='hidden sm:inline text-xs text-gray-400'>
@@ -672,7 +704,7 @@ class GeneralQuestionView extends React.Component {
                             <div className='flex-1 min-w-0 w-full'>
                                 {/* Surface 1: the problem. */}
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 md:p-7">
-                                    <SingleSelectMCQQuestion
+                                    <QuestionBody
                                         questionDetails={details}
                                         selectedOptionId={details.selectedOptionId}
                                         updateQuestionAnswer={this.updateQuestionAnswer}

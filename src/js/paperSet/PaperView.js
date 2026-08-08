@@ -2,7 +2,7 @@ import React from 'react';
 import '../../App.css';
 import { connect } from 'react-redux';
 import {savePaperDetails} from '../../store/actions/solgressAction'
-import SingleSelectMCQQuestion from "../questionSet/largeScreen/SingleSelectMCQQuestion";
+import QuestionBody from '../questionSet/largeScreen/QuestionBody';
 import PaperAPIsConnector from "../../apis/PaperAPIsConnector";
 import { PaperViewHelperUtil } from '../../utils/PaperViewHelperUtil';
 import {currentURLHost} from '../../constants/hostConfig';
@@ -444,7 +444,7 @@ class PaperView extends React.Component {
                             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 md:p-7">
                                 {this.getQuestionMetaJSX()}
                                 <div className="mt-4">
-                                    <SingleSelectMCQQuestion
+                                    <QuestionBody
                                         questionDetails = {currentQuestionDetails}
                                         selectedOptionId = {selectedOptionId}
                                         updateQuestionAnswer = {this.updateQuestionAnswer}
