@@ -14,6 +14,7 @@ import ChannelHome from './js/channelSet/ChannelHome';
 import UserQuestionSubmissionsSummary from './js/questionSet/UserQuestionSubmissionsSummary';
 import UserPaperSubmissionsSummary from './js/paperSet/UserPaperSubmissionsSummary';
 import AboutUs from './js/AboutUs';
+import Home from './js/Home';
 
 export default [
     {
@@ -31,8 +32,8 @@ export default [
     {
         loadData,
         path: "/",
-        element: <QuestionSet/>,
-        exact: false,
+        element: <Home/>,
+        exact: true,
     },
     {
         loadData,
@@ -106,12 +107,6 @@ export default [
         element: <AboutUs/>,
         exact: false,
     },
-    {
-        loadData,
-        path: "/",
-        element: <div/>,
-        exact: false,
-    }
 ];
 
 // <Routes>
