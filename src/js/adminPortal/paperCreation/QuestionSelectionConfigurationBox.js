@@ -21,16 +21,17 @@ import {currentURLHost} from './../../../constants/hostConfig';
 import PagingSection from '../platformCapabilities/PagingSection';
 import ClipLoader from "react-spinners/ClipLoader";
 import { dataOf } from '../../../apis/unwrap';
+import { DEFAULT_PAGE_SIZE, coercePageSize } from '../../../constants/pagination';
 
 // Imports removed from this file because nothing referenced them: `Split`
 // (react-split), `TableHead`, `clickableSearchTableBodyCellTextCSS`,
-// `Pagination`, `AiFillSetting`, and `Popover`/`ArrowContainer`. Paging and its
-// page-size popover are owned by PagingSection, which is what this file renders,
-// so the controls were imported here a second time and never mounted.
+// `Pagination`, `AiFillSetting`, and `Popover`/`ArrowContainer`. Paging is owned
+// by PagingSection, which is what this file renders, so the controls were
+// imported here a second time and never mounted.
 
 // Fallback shape for the paged list endpoint, used when a request fails so
 // render paths that read `.questions` / `.pageCount` keep working.
-const EMPTY_PAGE = { questions: [], pageCount: 0, pageSize: 10 };
+const EMPTY_PAGE = { questions: [], pageCount: 0, pageSize: DEFAULT_PAGE_SIZE };
 
 const mapDispatchToProps = dispatch => ({
     saveQuestionSet: (payload) => dispatch(saveQuestionSet(payload)),
@@ -56,7 +57,7 @@ class QuestionSelectionConfigurationBox extends React.Component {
 
     initializeQuestions = () => {
         // `const search = window.location.search` was read here and never used.
-        QuestionsReceiver.getAllFilteredQuestions("",[], [],0, 10).then(paperData=>{
+        QuestionsReceiver.getAllFilteredQuestions("",[], [],0, DEFAULT_PAGE_SIZE).then(paperData=>{
             if(!this.props.showSelectedQuestions) {
                 let payload = {};
                 payload.tags = [];
@@ -67,7 +68,7 @@ class QuestionSelectionConfigurationBox extends React.Component {
                 payload.searchedKey = "";
                 payload.helpSectionEnabled = false;
                 payload.currentPage = 1;
-                payload.currentPageSize = 10;
+                payload.currentPageSize = DEFAULT_PAGE_SIZE;
                 this.props.saveQuestionSet(payload);
             }
         });
@@ -416,11 +417,11 @@ class QuestionSelectionConfigurationBox extends React.Component {
         this.refreshSearch(value-1, this.props.questionSet.currentPageSize);
     }
 
+    // Was `this.refreshSearch(0, event.target.value)`, storing the <select>'s
+    // string into `currentPageSize` and then handing that string to the API
+    // connector as the page size.
     updatePageSize = (event) => {
-        this.refreshSearch(0, event.target.value);
-    }
-    toggleLoginPopOver = () => {
-        this.setState({"isPageSettingsConfigOpen" : this.state.isPageSettingsConfigOpen===undefined?true:!this.state.isPageSettingsConfigOpen});
+        this.refreshSearch(0, coercePageSize(event.target.value));
     }
 
     componentDidMount() {
@@ -436,27 +437,35 @@ class QuestionSelectionConfigurationBox extends React.Component {
                     <ClipLoader color="#2563EB" size={60}/>
                 </div>
         }
-        {/* This was `<div children="overflow-y-auto max-h-[49rem] min-h-[49rem] ...">`.
-            `children` is not `className`: the string was passed as the element's
-            children prop and then discarded, because JSX's nested children take
-            precedence over the attribute. The scroll container it describes never
-            existed, so the question picker had no height cap and no internal
-            scrolling — the paper builder grew to whatever length the result list
-            happened to be instead of scrolling inside a fixed panel beside the
-            section configuration. */}
+        // The wrapper below was `<div children="overflow-y-auto max-h-[49rem] ...">`.
+        // `children` is not `className`: the string was passed as the element's
+        // children prop and then discarded, because JSX's nested children take
+        // precedence over the attribute. The scroll container it describes never
+        // existed, so the question picker had no height cap and no internal
+        // scrolling — the paper builder grew to whatever length the result list
+        // happened to be instead of scrolling inside a fixed panel beside the
+        // section configuration.
+        //
+        // This note used to sit here as a `{/* ... */}` JSX comment, which outside
+        // of JSX is a bare block statement containing an expression — hence the
+        // `no-lone-blocks` build warning. Now an ordinary comment.
         return <div className="overflow-y-auto max-h-[49rem] min-h-[49rem]">
             <div className="w-full  shadow bg-white ">
                 <div className='px-3'><QuestionSetSearchBoxComponent/></div>
                 {this.getQuestionsTableJSX()}
-                <PagingSection
-                    pageCount = {this.props.questionSet.questions.pageCount}
-                    currentPageNumber = {this.props.questionSet.currentPage}
-                    handlePageChange= {this.handlePageChange}
-                    currentPageSize = {this.props.questionSet.currentPageSize}
-                    updatePageSize ={this.updatePageSize}
-                    togglePageSettingPopover = {this.toggleLoginPopOver}
-                    isPageSettingsConfigOpen = {this.state.isPageSettingsConfigOpen}
-                />
+                {/* `.questions.pageCount` was read straight off the slice. A failed
+                    first request leaves `questions` undefined while `questionSet`
+                    itself is set, so this threw and took the whole paper builder
+                    down rather than just the picker's pager. */}
+                <div className='px-3 pb-3'>
+                    <PagingSection
+                        pageCount = {(this.props.questionSet.questions || {}).pageCount}
+                        currentPageNumber = {this.props.questionSet.currentPage}
+                        handlePageChange = {this.handlePageChange}
+                        currentPageSize = {this.props.questionSet.currentPageSize}
+                        updatePageSize = {this.updatePageSize}
+                    />
+                </div>
             </div>
         </div>;
     }

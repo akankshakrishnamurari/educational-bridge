@@ -1,23 +1,24 @@
 import React from 'react';
 import { connect } from 'react-redux';
 import {saveUserDetails, updateGeneralInfo} from '../../../store/actions/solgressAction'
-// NAMED IMPORTS, DELIBERATELY
-// ---------------------------
-// This file used to do `import GoogleLogout from 'react-google-login'`. The
-// package's default export is GoogleLogin, so that line imported the *sign-in*
-// component and gave it the name GoogleLogout. The "Sign out" item in the account
-// menu therefore rendered a sign-in control: clicking it opened Google's sign-in
-// popup and never cleared the session, so signing out was impossible on desktop.
-// (The mobile header got away with the same mistake only because it also had a
-// local click handler that wiped the session and reloaded the page.)
-import { GoogleLogin, GoogleLogout } from 'react-google-login';
+// Sign-in is Google Identity Services now, not `react-google-login`. See
+// utils/googleAuth.js for why the old library had to go: it wrapped the retired
+// gapi.auth2 platform library, which Google blocks, and every sign-in attempt
+// died with "Error 400: redirect_uri_mismatch".
+//
+// Both of that package's components are gone from this file. GoogleLogout in
+// particular was never really here: this file used to do
+// `import GoogleLogout from 'react-google-login'`, and since the package's
+// default export is GoogleLogin, that imported the *sign-in* component under the
+// name GoogleLogout. The "Sign out" item therefore rendered a sign-in control.
+// GIS has no logout component at all, so signing out is now an ordinary button.
+import GoogleSignInButton from '../../../components/common/GoogleSignInButton';
+import { completeGoogleSignIn, signOutOfGoogle } from '../../../utils/googleAuth';
 import { generalTextSize } from '../../../constants/TextSizeConstants';
 import { layout, colors } from '../../../constants/designTokens';
 import { currentURLHost } from '../../../constants/hostConfig';
 import { Popover, ArrowContainer } from 'react-tiny-popover';
-import { currentGoogleLoginAPIKey } from '../../../constants/hostConfig';
 import { AiOutlineSearch } from "react-icons/ai";
-import {FcGoogle} from "react-icons/fc"
 import notify from '../../../utils/notify';
 import {IoCreateOutline} from "react-icons/io5"
 import {MdExitToApp} from "react-icons/md";
@@ -70,13 +71,23 @@ class EducationalBridgeHeaderLargeScreen extends React.Component {
         this.props.updateGeneralInfo(generalInfo);
     }
 
-    handleGoogleLoginResponse = (response) => {
-        window.sessionStorage.setItem("userDetails", JSON.stringify(response.profileObj));
-        this.props.saveUserDetails(response.profileObj);
+    /**
+     * Commits a successful Google sign-in.
+     *
+     * `completeGoogleSignIn` stores the session and records the login server-side.
+     * That server call cannot be left to `this.props.saveUserDetails`: the parent
+     * header passes down a `saveUserDetails` that posts to the API, but this
+     * component is `connect`ed with a `saveUserDetails` of its own, and
+     * react-redux's default merge puts dispatch props last — so the parent's
+     * version was shadowed and no login was ever recorded.
+     */
+    handleGoogleSignIn = async (user) => {
+        this.props.saveUserDetails(user);
+        await completeGoogleSignIn(user);
         window.location.reload();
     }
 
-    handleGoogleLoginFailureResponse = () => {
+    handleGoogleSignInFailure = () => {
         // This previously only wrote to the console, so a failed sign-in looked to the
         // visitor like nothing had happened at all.
         notify.error("We couldn't sign you in with Google. Please try again.");
@@ -85,19 +96,18 @@ class EducationalBridgeHeaderLargeScreen extends React.Component {
     /**
      * Clears the local session and reloads.
      *
-     * Called both from GoogleLogout's onLogoutSuccess and directly from the button's
-     * own click handler. Google's sign-out is a network round trip that can fail or
-     * hang; if it never resolves, onLogoutSuccess never fires. A sign-out that
-     * silently does nothing is worse than one that drops the local session anyway,
-     * so the local session is cleared regardless and `hasSignedOut` keeps the reload
-     * from running twice.
+     * `hasSignedOut` guards against the reload running twice. Unlike the old
+     * GoogleLogout component, nothing here waits on a network round trip to
+     * Google — `signOutOfGoogle` only clears GIS's local auto-select state — so a
+     * sign-out can no longer hang or silently do nothing.
      */
-    handleGoogleLogoutResponse = () => {
+    handleSignOut = () => {
         if (this.hasSignedOut) {
             return;
         }
         this.hasSignedOut = true;
-        window.sessionStorage.setItem("userDetails", null);
+        signOutOfGoogle();
+        UserDetailsUtil.clearUserDetails();
         this.props.saveUserDetails(undefined);
         window.location.href = currentURLHost;
     }
@@ -164,26 +174,13 @@ class EducationalBridgeHeaderLargeScreen extends React.Component {
 
     getLoginLogoutButtonJSX = () => {
         if(!UserDetailsUtil.isSignedIn()) {
-            return <GoogleLogin
-                clientId = {currentGoogleLoginAPIKey}
-                render={renderProps => (
-                    // One <button>, not a clickable <div> wrapping two nested
-                    // <button>s. The old markup announced itself to a screen reader
-                    // as two separate unlabelled buttons, and the element carrying
-                    // the click handler was not focusable at all.
-                    <button
-                        type="button"
-                        className="inline-flex items-center gap-2 h-10 pl-3 pr-4 rounded-lg bg-white border border-gray-300 text-sm font-medium text-primary-700 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 disabled:opacity-60"
-                        onClick={renderProps.onClick}
-                        disabled={renderProps.disabled}
-                    >
-                        <FcGoogle size={18} aria-hidden="true"/>
-                        Log in
-                    </button>
-                )}
-                onSuccess={this.handleGoogleLoginResponse}
-                onFailure = {this.handleGoogleLoginFailureResponse}
-                cookiePolicy = 'none'
+            // Google renders this button itself, in an iframe, so the custom markup
+            // that used to live here is not an option any more. `size: 'large'` is
+            // 40px tall, which matches the h-10 controls beside it.
+            return <GoogleSignInButton
+                onSignIn={this.handleGoogleSignIn}
+                onError={this.handleGoogleSignInFailure}
+                buttonOptions={{ size: 'large', text: 'signin', shape: 'rectangular' }}
             />;
         }
         const userDetails = UserDetailsUtil.getUserDetails() || {};
@@ -202,28 +199,14 @@ class EducationalBridgeHeaderLargeScreen extends React.Component {
                     <button type="button" className={MENU_ITEM_CLASS} onClick={this.moveToMyCreatedQuestions}>Questions I've written</button>
                     <button type="button" className={MENU_ITEM_CLASS} onClick={this.moveToMyCreatedPapers}>Papers I've built</button>
                     <div className='flex justify-center pt-2 px-2'>
-                        <GoogleLogout
-                            clientId = {currentGoogleLoginAPIKey}
-                            onLogoutSuccess={this.handleGoogleLogoutResponse}
-                            onFailure={this.handleGoogleLogoutResponse}
-                            render={renderProps => (
-                                <button
-                                    type="button"
-                                    className='inline-flex items-center justify-center gap-1.5 w-full h-9 px-3 rounded-lg bg-danger-600 hover:bg-danger-700 transition-colors text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-danger-500 focus:ring-offset-1'
-                                    onClick={() => {
-                                        // Ask Google to sign out, then clear locally
-                                        // regardless of whether that resolves.
-                                        if (typeof renderProps.onClick === 'function') {
-                                            renderProps.onClick();
-                                        }
-                                        this.handleGoogleLogoutResponse();
-                                    }}
-                                >
-                                    <MdExitToApp size={18} aria-hidden="true"/>
-                                    Sign out
-                                </button>
-                            )}
-                        />
+                        <button
+                            type="button"
+                            className='inline-flex items-center justify-center gap-1.5 w-full h-9 px-3 rounded-lg bg-danger-600 hover:bg-danger-700 transition-colors text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-danger-500 focus:ring-offset-1'
+                            onClick={this.handleSignOut}
+                        >
+                            <MdExitToApp size={18} aria-hidden="true"/>
+                            Sign out
+                        </button>
                     </div>
                 </div>
             </div>;

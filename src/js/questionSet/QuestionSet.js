@@ -19,12 +19,13 @@ import EmptyState from '../../components/common/EmptyState';
 import Footer from '../../components/common/Footer';
 import QuestionListItem from '../../components/questionSet/QuestionListItem';
 import { typography, layout } from '../../constants/designTokens';
+import { DEFAULT_PAGE_SIZE, coercePageSize } from '../../constants/pagination';
 import { dataOf, listOf } from '../../apis/unwrap';
 
 // Shape the list endpoint returns. Used as the fallback when a request fails so
 // the render path, which reads `set.questions` and `set.pageCount`, keeps working
 // instead of throwing on a null response.
-const EMPTY_PAGE = { questions: [], pageCount: 0, pageSize: 10 };
+const EMPTY_PAGE = { questions: [], pageCount: 0, pageSize: DEFAULT_PAGE_SIZE };
 
 const mapDispatchToProps = dispatch => ({
     saveQuestionSet: (payload) => dispatch(saveQuestionSet(payload)),
@@ -163,7 +164,7 @@ class QuestionSet extends React.Component {
             tags,
             searchText,
             pageNumber: 0,
-            pageSize: 10,
+            pageSize: DEFAULT_PAGE_SIZE,
             isInitialLoad: true,
         });
         await this.loadPapers(tags);
@@ -188,7 +189,10 @@ class QuestionSet extends React.Component {
         const resolvedTags = Array.isArray(tags) ? tags : [];
         const tagIds = resolvedTags.map((tag) => tag.id);
         const resolvedSearch = searchText || '';
-        const resolvedPageSize = pageSize || 10;
+        // Coerced rather than defaulted: the page-size <select> hands over the
+        // string "25", and this is the value stored back into redux and then used
+        // for the absolute row numbering below the list.
+        const resolvedPageSize = coercePageSize(pageSize);
         await QuestionsReceiver.getAllFilteredQuestions(
             resolvedSearch,
             tagIds,
@@ -242,7 +246,7 @@ class QuestionSet extends React.Component {
             tags,
             searchText: (this.props.questionSet || {}).searchedKey,
             pageNumber: 0,
-            pageSize: (this.props.questionSet || {}).currentPageSize || 10,
+            pageSize: coercePageSize((this.props.questionSet || {}).currentPageSize),
         });
         this.loadPapers(tags);
     }
@@ -395,7 +399,7 @@ class QuestionSet extends React.Component {
             </div>;
         }
         const currentUserGoogleId = UserDetailsUtil.getUserGoogleId();
-        const pageSize = this.props.questionSet.currentPageSize || 10;
+        const pageSize = coercePageSize(this.props.questionSet.currentPageSize);
         const currentPage = this.props.questionSet.currentPage || 1;
         const firstIndex = (currentPage - 1) * pageSize + 1;
         return <div className='divide-y divide-gray-100'>
@@ -428,7 +432,7 @@ class QuestionSet extends React.Component {
         if (page == undefined || page.questions == undefined || page.questions.length === 0) {
             return <div />;
         }
-        const pageSize = set.currentPageSize || 10;
+        const pageSize = coercePageSize(set.currentPageSize);
         const currentPage = set.currentPage || 1;
         const first = (currentPage - 1) * pageSize + 1;
         const last = first + page.questions.length - 1;
@@ -544,24 +548,45 @@ class QuestionSet extends React.Component {
         this.refreshSearch(value-1, this.props.questionSet.currentPageSize);
     }
 
+    /**
+     * Changing the page size returns to page 1. Staying on page 40 while moving
+     * from 10 to 100 per page would silently jump the reader ~3,900 rows forward
+     * from what they were looking at.
+     */
     updatePageSize = (event) => {
-        this.refreshSearch(0, event.target.value);
+        this.refreshSearch(0, coercePageSize(event.target.value));
     }
 
-    toggleLoginPopOver = () => {
-        this.setState({"isPageSettingsConfigOpen" : this.state.isPageSettingsConfigOpen==undefined?true:!this.state.isPageSettingsConfigOpen});
-    }
-
+    /**
+     * The pager belongs to the questions collection only.
+     *
+     * It used to render unconditionally, below whichever list was showing. Papers
+     * are fetched by `loadPapers`, which calls `getAllFilteredPapers` with no paging
+     * arguments at all — the endpoint returns every paper in one response. So the
+     * Papers tab displayed a pager reporting the *questions* page count, and
+     * clicking page 2 of it re-queried questions and left the paper list untouched.
+     *
+     * It is also suppressed when the current result set is empty, where a pager has
+     * nothing to page through, and PagingSection itself returns null at one page.
+     */
     getPagingSection = () => {
-        return <PagingSection
-            pageCount = {(this.props.questionSet.questions || {}).pageCount}
-            currentPageNumber = {this.props.questionSet.currentPage}
-            handlePageChange= {this.handlePageChange}
-            currentPageSize = {this.props.questionSet.currentPageSize}
-            updatePageSize ={this.updatePageSize}
-            togglePageSettingPopover = {this.toggleLoginPopOver}
-            isPageSettingsConfigOpen = {this.state.isPageSettingsConfigOpen}
-        />
+        const isViewingQuestions = !this.props.generalInfo || Boolean(this.props.generalInfo.isViewingQuestions);
+        if (!isViewingQuestions) {
+            return null;
+        }
+        const page = this.props.questionSet.questions;
+        if (!page || !Array.isArray(page.questions) || page.questions.length === 0) {
+            return null;
+        }
+        return <div className='w-full pt-6'>
+            <PagingSection
+                pageCount = {page.pageCount}
+                currentPageNumber = {this.props.questionSet.currentPage}
+                handlePageChange = {this.handlePageChange}
+                currentPageSize = {this.props.questionSet.currentPageSize}
+                updatePageSize = {this.updatePageSize}
+            />
+        </div>;
     }
 
     /**
@@ -600,7 +625,7 @@ class QuestionSet extends React.Component {
             tags: set.tags,
             searchText,
             pageNumber: 0,
-            pageSize: set.currentPageSize || 10,
+            pageSize: coercePageSize(set.currentPageSize),
             // A slower earlier request must not overwrite a newer one's results.
             isStale: () => this.latestSearchQuery !== searchText,
         });
@@ -663,7 +688,14 @@ class QuestionSet extends React.Component {
         // pageCount lives on the response envelope (set.questions.pageCount), not
         // on the redux slice itself. Reading set.pageCount returned undefined, so
         // this indicator never rendered.
-        const pageCount = (set.questions || {}).pageCount;
+        //
+        // It is also scoped to the questions collection and to result sets that
+        // actually span more than one page. Papers are fetched unpaged, so on the
+        // Papers tab this read "Page 1 of 468" — the *questions* page count, beside a
+        // list of papers it had nothing to do with. And a search that matched nothing
+        // reported "Page 1 of 1" above an empty state.
+        const pageCount = isViewingQuestions ? (set.questions || {}).pageCount : null;
+        const showPageIndicator = Number.isFinite(pageCount) && pageCount > 1;
         return <div className='flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3'>
             <div>
                 <h1 className={typography.h1}>
@@ -675,7 +707,7 @@ class QuestionSet extends React.Component {
                         : 'Full-length timed papers assembled from the question bank.'}
                 </p>
             </div>
-            {currentPage && pageCount
+            {currentPage && showPageIndicator
                 ? <div className='text-sm text-gray-500 shrink-0 tabular-nums'>
                     Page <span className='font-semibold text-gray-700'>{currentPage}</span> of {pageCount}
                 </div>
@@ -735,9 +767,11 @@ class QuestionSet extends React.Component {
                     <PageCard padding="p-0" className="mt-4 overflow-hidden">
                         {this.getQuestionsTableJSX()}
                     </PageCard>
-                    <div className='w-full flex justify-center py-8'>
-                        {this.getPagingSection()}
-                    </div>
+                    {/* The pager returns null when it has nothing to offer, and its
+                        own top padding goes with it — the wrapper here used to be an
+                        always-present `py-8` centring row, which left 64px of empty
+                        space under the empty state and under the Papers tab. */}
+                    {this.getPagingSection()}
                 </div>
             </div>
             <Footer />

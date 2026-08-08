@@ -63,7 +63,7 @@ application. It talks to a separate Spring Boot backend
 | Styling | Tailwind CSS, plus MUI v4 (`@material-ui/core`) and MUI v5 (`@mui/material`) components in older/newer areas of the app respectively |
 | Rich text editing | CKEditor 5, TinyMCE (with WIRIS MathType plugins for equation input) |
 | Math rendering | KaTeX (`katex`), sanitized with DOMPurify |
-| Auth | `react-google-login` (Google Identity / OAuth) |
+| Auth | Google Identity Services (`accounts.google.com/gsi/client`, ID-token flow) via `src/utils/googleAuth.js` |
 | Charts | `react-google-charts` |
 | HTTP | Native `fetch` via small `*Receiver`/`*Connector` API client classes |
 | Hosting (production) | AWS Amplify Hosting, deployed from this GitHub repo |

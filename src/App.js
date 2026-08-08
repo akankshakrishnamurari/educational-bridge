@@ -1,11 +1,7 @@
 import { Route, Routes } from 'react-router-dom';
-import React, { useEffect } from 'react';
+import React from 'react';
 import './App.css';
-import { currentGoogleLoginAPIKey } from './constants/hostConfig';
 import route from './route';
-import jwt_decode from 'jwt-decode';
-import UserAPIConnector from './apis/UserAPIConnector';
-import { gapi } from 'gapi-script';
 
 // App is the routing shell only.
 //
@@ -13,38 +9,28 @@ import { gapi } from 'gapi-script';
 // surfaces, such as the timed paper view, need a different one) and the footer is
 // opted into per page via components/common/Footer, because focused task surfaces
 // with sticky action bars should not have a footer competing for the same space.
+//
+// TWO GOOGLE SIGN-IN INITIALISATIONS USED TO LIVE HERE
+// ----------------------------------------------------
+// Neither did anything useful, and between them they loaded both of Google's auth
+// libraries on every page:
+//
+//  * A `google.accounts.id.initialize` + `renderButton` pair that drew into
+//    `document.getElementById('signInDiv')`. No element with that id exists
+//    anywhere in the app, so renderButton was handed `null` on every mount.
+//    Its callback — the only code that recorded a login server-side — could
+//    therefore never fire.
+//
+//  * A `gapi.load('client:auth2')` from `gapi-script`, with an effect that had no
+//    dependency array, so it re-ran on every single render. That is the retired
+//    Google Sign-In platform library, and pulling it in is what put the app on
+//    the code path that fails with "Error 400: redirect_uri_mismatch".
+//
+// Sign-in now lives with the control that triggers it: components/common/
+// GoogleSignInButton, backed by utils/googleAuth. Nothing global is needed —
+// the GIS script is loaded on demand, and only where a sign-in button renders.
 
 function App() {
-    function handleGoogleLoginCallback(response) {
-        let userDetails = jwt_decode(response.credential);
-        window.sessionStorage.setItem('userDetails', JSON.stringify(userDetails));
-        UserAPIConnector.updateUserDetails(userDetails);
-        window.location.reload();
-    }
-
-    useEffect(() => {
-        /* global google */
-        google.accounts.id.initialize({
-            client_id: currentGoogleLoginAPIKey,
-            scope: ['https://www.googleapis.com/auth/user.birthday.read'],
-            callback: handleGoogleLoginCallback,
-        });
-        google.accounts.id.renderButton(
-            document.getElementById('signInDiv'),
-            { theme: 'outline', size: 'large' }
-        );
-    }, []);
-
-    useEffect(() => {
-        const initClient = () => {
-            gapi.client.init({
-                clientId: currentGoogleLoginAPIKey,
-                scope: '',
-            });
-        };
-        gapi.load('client:auth2', initClient);
-    });
-
     return (
         <div className="App min-h-screen">
             <Routes>

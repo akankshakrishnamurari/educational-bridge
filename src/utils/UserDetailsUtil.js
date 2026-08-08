@@ -24,6 +24,30 @@ export class UserDetailsUtil {
         }
     }
 
+    /**
+     * Persist the signed-in user.
+     *
+     * Both headers used to inline this write, with the sign-in and sign-out paths
+     * spelling the key and the "signed out" sentinel out by hand in four places.
+     */
+    static storeUserDetails = (userDetails) => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+        window.sessionStorage.setItem('userDetails', JSON.stringify(userDetails));
+    }
+
+    /**
+     * Drop the session. Writes the string "null" rather than removing the key,
+     * because that is the sentinel getUserDetails has always understood.
+     */
+    static clearUserDetails = () => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+        window.sessionStorage.setItem('userDetails', 'null');
+    }
+
     static getUserGoogleId = () => {
         const details = UserDetailsUtil.getUserDetails();
         return details == null ? null : (details.googleId || null);
