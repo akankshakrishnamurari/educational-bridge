@@ -30,8 +30,7 @@ import { PAGE_SIZE_OPTIONS, coercePageSize, DEFAULT_PAGE_SIZE } from '../../../c
  *
  * 4. The jump-to-page input fired the page change on every keystroke. Typing "12"
  *    requested page 1, then page 12; typing "125" requested 1, 12, then 125. It is
- *    now a form, committed on submit or blur, and validated against the real page
- *    count.
+ *    now a form with an explicit submit, validated against the real page count.
  *
  * 5. Nothing closed the popover after a change, and no control reported which
  *    page you were on unless you opened the gear.
@@ -61,7 +60,7 @@ const range = (start, end) => {
  * width as you move through the pages — a pager that reflows under the cursor
  * makes clicking "next" twice in a row unreliable.
  */
-export const buildPageItems = (current, total, siblings = 1) => {
+const buildPageItems = (current, total, siblings = 1) => {
     if (!Number.isFinite(total) || total < 1) {
         return [];
     }
