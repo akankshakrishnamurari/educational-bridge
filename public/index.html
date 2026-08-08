@@ -17,7 +17,13 @@
       name="description"
       content="A free, non-profit question bank for competitive exam preparation. Practise questions tagged by subject, chapter, topic and difficulty, with worked solutions and timed papers."
     />
-    <meta name="referrer" content="same-origin-allow-popups" />
+    <!-- Was content="same-origin-allow-popups", which is a Cross-Origin-Opener-Policy
+         value, not a referrer policy. Every browser rejected it, logged
+         "Failed to set referrer policy" to the console on every page load, and fell
+         back to its default. strict-origin-when-cross-origin is that default made
+         explicit: full URL to our own origin, origin only to third parties, nothing
+         at all on an HTTPS-to-HTTP downgrade. -->
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
 
     <!-- Link previews. Without these, every link shared to WhatsApp, Telegram or
          X renders as a bare URL with no title, image or description, which is how

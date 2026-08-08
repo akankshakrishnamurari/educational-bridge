@@ -88,7 +88,15 @@ class NewTagCreation extends React.Component {
             ...this.props.newTagDetails,
             tagName: this.getComposedTagName(),
         }
-        TagReceiver.upsertNewTag(request).then(()=>{
+        // The API layer signals failure by resolving with null, not by rejecting, so
+        // the previous `.then(success).catch(failure)` pair reported "Tag created"
+        // for every outcome including a 500.
+        TagReceiver.upsertNewTag(request).then((result)=>{
+            if (result == null) {
+                notify.error('Could not create that tag. It may already exist.')
+                this.setState({ isSubmitting: false })
+                return
+            }
             notify.success('Tag "' + request.tagName + '" created.')
             // Cleared so the next tag starts from a clean field rather than the
             // previous value, which is what invited the double-prefix bug.
@@ -97,9 +105,6 @@ class NewTagCreation extends React.Component {
                 tagDescription: '',
                 tagPrefix: this.props.newTagDetails.tagPrefix,
             })
-            this.setState({ isSubmitting: false })
-        }).catch(()=>{
-            notify.error('Could not create that tag. It may already exist.')
             this.setState({ isSubmitting: false })
         })
     }

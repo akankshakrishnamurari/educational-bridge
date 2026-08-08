@@ -1,14 +1,17 @@
 /*
-  src/actions/solgressAction.js
-*/
-import {getInitialState} from "../utils/reduxUtil";
+  Redux action creators.
 
-export const solgressAction = () => dispatch => {
-    dispatch({
-        type: 'SIMPLE_ACTION',
-        payload: 'result_of_simple_action'
-    })
-}
+  Every creator below returns a PLAIN OBJECT. That is deliberate and the store
+  depends on it: no middleware is installed (see store/store.js), so dispatching
+  a function here would throw "Actions must be plain objects". If an async action
+  is ever needed, apply redux-thunk in store.js first.
+
+  Two thunk-style creators used to live here — `solgressAction`, which dispatched
+  a 'SIMPLE_ACTION' with the payload 'result_of_simple_action', and
+  `initializeReduxState`. Both were written as `() => dispatch => {...}`, neither
+  was imported anywhere, and neither could have worked without thunk middleware.
+  Removed rather than left as a trap for the next person who tries to use them.
+*/
 
 export const saveSpeakerDetails = (payload) => {
     return {
@@ -128,11 +131,4 @@ export const updateGeneralInfo = (payload) => {
         type: 'UPDATE_GENERAL_INFO',
         payload: payload
     };
-}
-
-export const initializeReduxState = () => dispatch => {
-    dispatch({
-        type: 'INITIALIZE_STATE',
-        payload: getInitialState()
-    })
 }

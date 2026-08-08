@@ -23,6 +23,11 @@ import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import StatTile from '../../../components/common/StatTile';
 import FormField from '../../../components/common/FormField';
 import { typography, layout } from '../../../constants/designTokens';
+import { dataOf } from '../../../apis/unwrap';
+
+// Fallback shape for the paged list endpoint, used when a request fails so
+// render paths that read `.questions` / `.pageCount` keep working.
+const EMPTY_PAGE = { questions: [], pageCount: 0, pageSize: 10 };
 
 const mapDispatchToProps = dispatch => ({
     updateNewPaperDetails: (payload) => dispatch(updateNewPaperDetails(payload)),
@@ -84,13 +89,13 @@ class NewPaperPortal extends React.Component {
         if(tabName === 'REVIEW_AND_PUBLISH' || tabName === 'QUESTION_SELECTION_SELECTED_QUESTION') {
             QuestionsReceiver.getQuestionsByQuestionIds(this.props.newPaperDetails.selectedQuestionIds).then(questionsData=>{
                 let payload = {...this.props.questionSet};
-                payload.questions = questionsData.data;
+                payload.questions = dataOf(questionsData, EMPTY_PAGE);
                 this.props.saveQuestionSet(payload);
             });
         } else {
             QuestionsReceiver.getAllFilteredQuestions(this.props.questionSet.searchedKey, [], [], this.props.currentPage).then(questionsData=>{
                 let payload = {...this.props.questionSet};
-                payload.questions = this.normalise(questionsData.data);
+                payload.questions = this.normalise(dataOf(questionsData, EMPTY_PAGE));
                 this.props.saveQuestionSet(payload);
             });
         }
@@ -849,15 +854,30 @@ class NewPaperPortal extends React.Component {
     }
 
     submitPaper = async () => {
-        this.setState({ isPublishing: true });
-        try {
-            await PaperSubmissionUtil.submitPaper(this.props.newPaperDetails);
-            window.sessionStorage.setItem("createdByMe",  true);
-            window.location.href = currentURLHost + "papers";
-        } catch (err) {
-            notify.error('Could not publish the paper. Please try again.');
-            this.setState({ isPublishing: false, isConfirmingPublish: false });
+        // Guard against a second confirm click while the request is in flight: the
+        // dialog stays mounted until navigation, and a duplicate submit creates a
+        // duplicate paper.
+        if (this.state.isPublishing === true) {
+            return;
         }
+        this.setState({ isPublishing: true });
+        let succeeded = false;
+        try {
+            // submitPaper resolves false on failure rather than throwing, so the
+            // result has to be checked. It previously returned a fixed success
+            // string, which meant a failed publish still navigated away and the
+            // author lost the whole paper without being told.
+            succeeded = await PaperSubmissionUtil.submitPaper(this.props.newPaperDetails);
+        } catch (err) {
+            succeeded = false;
+        }
+        if (!succeeded) {
+            notify.error('Could not publish the paper. Your work is still here — please try again.');
+            this.setState({ isPublishing: false, isConfirmingPublish: false });
+            return;
+        }
+        window.sessionStorage.setItem("createdByMe",  true);
+        window.location.href = currentURLHost + "papers";
     }
 
     componentDidMount() {
@@ -876,7 +896,7 @@ class NewPaperPortal extends React.Component {
             return <div className="bg-gray-50 min-h-screen">
                 <EducationalBridgeHeader/>
                 <div className='flex justify-center py-20'>
-                    <ClipLoader color="#2563EB" size="60"/>
+                    <ClipLoader color="#2563EB" size={60}/>
                 </div>
             </div>;
         }

@@ -3,6 +3,17 @@ import { Editor } from '@tinymce/tinymce-react';
 import { generalTextSize } from '../../../constants/TextSizeConstants';
 import {JSXUtils} from "../../../utils/JSXUtils";
 
+// TinyMCE cloud key. Read from the environment so it can be rotated without a code
+// change; the previous hardcoded value stays as the fallback so existing builds are
+// unaffected.
+//
+// NOTE: Create React App inlines REACT_APP_* variables into the bundle at build
+// time, so this is not a way to keep the key secret — it is still visible to anyone
+// who reads the JavaScript. TinyMCE cloud keys are domain-locked, which is what
+// actually limits their use. This is about being able to change it, not hide it.
+const TINYMCE_API_KEY = process.env.REACT_APP_TINYMCE_API_KEY
+    || "mg9hwaubygn0sxbrexswmvulezrt2bmf6djezddmu34w2qx3";
+
 
 // A leftover CKEditor toolbar config used to sit here. It was never referenced --
 // this component renders TinyMCE, whose toolbar is configured inline below -- and
@@ -48,25 +59,47 @@ class TextEditor extends React.Component {
     getRichTextEditorJSX = () => {
         let editorRef = this.props.editorRef;
         let editor = <Editor
-            apiKey= "mg9hwaubygn0sxbrexswmvulezrt2bmf6djezddmu34w2qx3"
+            apiKey={TINYMCE_API_KEY}
             // onInit={(evt, editor) => editorRef.current = editor}
             value={this.props.data}
             init={{
                 height: 300,
                 menubar: true,
                 branding: false,
-                plugins: [
-                    'advlist autolink lists link image charmap print preview anchor',
-                    'searchreplace visualblocks code fullscreen image',
-                    'insertdatetime media table paste code help wordcount'
-                ],
-                external_plugins: {
-                    'tiny_mce_wiris': `https://www.wiris.net/demo/plugins/tiny_mce/plugin.js`,
-                },
-                toolbar: 'fullscreen undo redo | formatselect | subscript superscript underline | ' +
-                'bold italic backcolor forecolor removeformat| alignleft aligncenter ' +
-                'alignright alignjustify | bullist numlist outdent indent | ' +
-                'tiny_mce_wiris_formulaEditor tiny_mce_wiris_formulaEditorChemistry | image code help',
+                // ONE SPACE-SEPARATED LIST, AND ONLY PLUGINS THAT EXIST IN TINYMCE 6
+                // -----------------------------------------------------------------
+                // This was an array of three strings, each containing several
+                // space-separated plugin names. TinyMCE treats every array element as
+                // ONE plugin name, so it tried to fetch
+                // `plugins/insertdatetime media table paste code help wordcount/plugin.min.js`
+                // and logged "Failed to load plugin" three times. Not one plugin loaded.
+                //
+                // `print` and `paste` were also in the list; both were removed from
+                // TinyMCE 6 (paste is core now), so they would have 404'd even spelled
+                // correctly. @tinymce/tinymce-react 4 pulls cloud channel '6'.
+                plugins: 'advlist autolink lists link image charmap preview anchor '
+                    + 'searchreplace visualblocks code fullscreen '
+                    + 'insertdatetime media table code help wordcount',
+                // THE WIRIS MATHTYPE PLUGIN WAS REMOVED. Two reasons:
+                //
+                //  1. It crashed. The URL served the TinyMCE 4/5 build, which calls
+                //     `tinymce.create()` — an API deleted in TinyMCE 6 — so loading it
+                //     threw "tinymce.create is not a function" and took out the rest of
+                //     the editor's initialisation with it. The authoring page could not
+                //     be used.
+                //  2. Even working, it was the wrong tool here. It emits MathML, and
+                //     nothing in this app renders MathML: every question body is
+                //     typeset by KaTeX from $$...$$ delimiters (see
+                //     components/common/MathContent.js), which is also what the
+                //     importer writes. A MathType formula would have been stored and
+                //     then displayed as raw markup.
+                //
+                // It was additionally being loaded from wiris.net's *demo* endpoint,
+                // which is not something to depend on in production.
+                toolbar: 'fullscreen undo redo | blocks | subscript superscript underline | '
+                    + 'bold italic backcolor forecolor removeformat | alignleft aligncenter '
+                    + 'alignright alignjustify | bullist numlist outdent indent | '
+                    + 'image code help',
                 draggable_modal: true,
                 image_title: true,
                 automatic_uploads: true,
@@ -143,7 +176,14 @@ class TextEditor extends React.Component {
     // input with no way to change -- it warns, and the checkbox fights the user.
     getEditorConfigurations = () => {
         const toggle = 'inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 cursor-pointer select-none';
-        return <div className='flex flex-row items-center gap-4 bg-white py-1.5 px-2 justify-end rounded-b-lg border-t border-gray-100'>
+        return <div className='flex flex-row items-center gap-4 flex-wrap bg-white py-1.5 px-2 justify-end rounded-b-lg border-t border-gray-100'>
+            {/* Now that the formula-editor button is gone, the maths convention has to
+                be stated: this is how every question in the bank is written, and it is
+                what the renderer actually typesets. */}
+            <span className='text-xs text-gray-400 mr-auto'>
+                Maths goes between <code className='font-mono text-gray-600'>$$</code> marks, e.g.
+                <code className='font-mono text-gray-600'> $$x^2 + 1$$</code>
+            </span>
             <label className={toggle}>
                 <input
                     type='checkbox'

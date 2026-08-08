@@ -1,12 +1,10 @@
 import React from 'react';
-import Split from "react-split";
 import { connect } from 'react-redux';
 import {saveQuestionSet, updateNewPaperDetails} from '../../../store/actions/solgressAction';
 import QuestionsReceiver from "../../../apis/QuestionsReceiver";
 import TableContainer from "@mui/material/TableContainer";
 import Paper from "@mui/material/Paper";
 import Table from "@mui/material/Table";
-import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TableCell from "@mui/material/TableCell";
 import TableBody from "@mui/material/TableBody";
@@ -16,15 +14,23 @@ import { JSXUtils } from '../../../utils/JSXUtils';
 import OptionSelectionCheckbox from "../../../utils/OptionSelectionCheckbox";
 import SingleSelectMCQPreview from "../previews/SingleSelectMCQPreview";
 import EducationalBridgePopupBox from '../../coreCapabilities/EducationalBridgePopupBox';
-import { generalTextSize, clickableSearchTableBodyCellTextCSS, nonClickableSearchTableBodyCellTextCSS } from '../../../constants/TextSizeConstants';
+import { generalTextSize, nonClickableSearchTableBodyCellTextCSS } from '../../../constants/TextSizeConstants';
 import QuestionSetSearchBoxComponent from './../../questionSet/QuestionSetSearchBoxComponent';
 import notify from '../../../utils/notify';
 import {currentURLHost} from './../../../constants/hostConfig';
-import Pagination from '@material-ui/lab/Pagination';
-import { AiFillSetting } from "react-icons/ai";
-import { Popover, ArrowContainer } from 'react-tiny-popover';
 import PagingSection from '../platformCapabilities/PagingSection';
 import ClipLoader from "react-spinners/ClipLoader";
+import { dataOf } from '../../../apis/unwrap';
+
+// Imports removed from this file because nothing referenced them: `Split`
+// (react-split), `TableHead`, `clickableSearchTableBodyCellTextCSS`,
+// `Pagination`, `AiFillSetting`, and `Popover`/`ArrowContainer`. Paging and its
+// page-size popover are owned by PagingSection, which is what this file renders,
+// so the controls were imported here a second time and never mounted.
+
+// Fallback shape for the paged list endpoint, used when a request fails so
+// render paths that read `.questions` / `.pageCount` keep working.
+const EMPTY_PAGE = { questions: [], pageCount: 0, pageSize: 10 };
 
 const mapDispatchToProps = dispatch => ({
     saveQuestionSet: (payload) => dispatch(saveQuestionSet(payload)),
@@ -49,14 +55,15 @@ class QuestionSelectionConfigurationBox extends React.Component {
     }
 
     initializeQuestions = () => {
-        const search = window.location.search
+        // `const search = window.location.search` was read here and never used.
         QuestionsReceiver.getAllFilteredQuestions("",[], [],0, 10).then(paperData=>{
             if(!this.props.showSelectedQuestions) {
                 let payload = {};
                 payload.tags = [];
                 payload.suggestedTags = [];
                 payload.isTagSearchActive = false;
-                payload.questions = this.normalise(paperData.data, paperData.data.pageCount);
+                const page = dataOf(paperData, EMPTY_PAGE);
+                payload.questions = this.normalise(page, page.pageCount);
                 payload.searchedKey = "";
                 payload.helpSectionEnabled = false;
                 payload.currentPage = 1;
@@ -92,11 +99,17 @@ class QuestionSelectionConfigurationBox extends React.Component {
     }
 
     openQuestionSubmissionPopupView = (question) => {
-        let triggerJSX = <BsEyeFill color = {'green'}  className='w-4 h-4 sm:w-4 sm:h-4 md:w-5 md:h-5' />;
-        let popupContentHeader = <div className={generalTextSize + ' bg-success-50 text-center text-primary-800 flex justify-center py-1 pb-2 px-3 hover hover:underline flex w-full grow'}
-                onClick={()=>window.open(currentURLHost + "question/view?question_id="+question.id)}>
-                Click here for full view of Question
-            </div>;
+        let triggerJSX = <BsEyeFill className='w-4 h-4 md:w-5 md:h-5 text-gray-500' aria-hidden="true"/>;
+        // Was a <div onClick={window.open}>, i.e. a link that neither looked nor
+        // behaved like one: no keyboard access, no middle-click, no "open in new tab".
+        let popupContentHeader = <a
+                href={currentURLHost + "question/view?question_id=" + question.id}
+                target="_blank"
+                rel="noreferrer"
+                className={generalTextSize + ' bg-success-50 text-center text-primary-800 flex justify-center py-1 pb-2 px-3 hover:underline w-full grow'}
+            >
+                Open the full question in a new tab
+            </a>;
         let postPopupContent = <div className="border-b-2 ">
             <SingleSelectMCQPreview
                 questionDetails = {question}
@@ -106,8 +119,9 @@ class QuestionSelectionConfigurationBox extends React.Component {
         </div>;
         return <EducationalBridgePopupBox
             popupModalClassName = "bg-white border-double border-4 border-gray-500 min-w-[80%]"
-            popupTriggerContentClassName = ""
+            popupTriggerContentClassName = "p-1 rounded hover:bg-gray-100"
             popupTriggerContent = {triggerJSX}
+            triggerAriaLabel = "Preview this question"
             postPopupContentHeaderClassName = "h-full w-full"
             postPopupContentHeader = {popupContentHeader}
             postpopupContentClassName =""
@@ -166,17 +180,11 @@ class QuestionSelectionConfigurationBox extends React.Component {
         </div>;
     }
 
-    activateQuestionViewPopup = (questionId) => {
-        let payload = {...this.props.questionSet};
-        payload.popupQuestionId = questionId;
-        this.props.saveQuestionSet(payload);
-    }
-
-    deactivateQuestionViewPopup = (questionId) => {
-        let payload = {...this.props.questionSet};
-        payload.popupQuestionId = undefined;
-        this.props.saveQuestionSet(payload);
-    }
+    // activateQuestionViewPopup / deactivateQuestionViewPopup used to push a
+    // `popupQuestionId` through redux so a hover could swap one row's icon for a
+    // modal. Now that the preview is an ordinary modal trigger present on every row,
+    // there is no hover state to track — and routing transient hover state through
+    // the global store was re-rendering the whole table on every mouse move.
 
     selectQuestionId = (questionId) => {
         if(this.props.newPaperDetails.selectedQuestionIds.includes(questionId)) {
@@ -260,20 +268,25 @@ class QuestionSelectionConfigurationBox extends React.Component {
     getQuestionsTableBodyRowsJSX = () => {
         let tableRows = [];
         if(this.props.questionSet === undefined || this.props.questionSet.isRefreshing===true) {
-            let noTableFoundRow =<TableRow className="hover:bg-slate-100">
+            let noTableFoundRow =<TableRow key="loading">
                 <TableCell className='w-full'>
                     <div className='flex w-full justify-center ' style={{minHeight: window.innerHeight*0.6}}>
-                        <ClipLoader color="#2563EB" size="60" className=''/>
+                        <ClipLoader color="#2563EB" size={60}/>
                     </div>
                 </TableCell>
             </TableRow>
             tableRows.push(noTableFoundRow);
             return tableRows;
-        } else if(this.props.questionSet.questions.questions.length===0) {
-            let noTableFoundRow =<TableRow className="hover:bg-slate-100">
+        }
+        // A failed list request leaves `questions` as the EMPTY_PAGE fallback, but a
+        // partially-initialised slice can still have `questions` absent entirely,
+        // and reading `.questions.length` off that threw.
+        const page = this.props.questionSet.questions;
+        if(page === undefined || !Array.isArray(page.questions) || page.questions.length===0) {
+            let noTableFoundRow =<TableRow key="empty">
                 <TableCell>
-                    <p className={"flex justify-center " + generalTextSize}  style={{minHeight: window.innerHeight*0.5}}>                    
-                        No question found with matching filters and search key. Please try updating the query and filter
+                    <p className={"flex justify-center text-center " + generalTextSize}  style={{minHeight: window.innerHeight*0.5}}>
+                        No questions match those filters. Try widening your search.
                     </p>
                 </TableCell>
             </TableRow>
@@ -281,40 +294,52 @@ class QuestionSelectionConfigurationBox extends React.Component {
             return tableRows;
         }
         this.props.questionSet.questions.questions.forEach((question, index) => {
-            let newRow = <TableRow className="hover:bg-slate-100">
+            const isSelected = this.props.newPaperDetails.selectedQuestionIds.includes(question.id);
+            // `key` was missing on every row, so React could not match rows across
+            // renders: toggling one selection re-created the whole table.
+            let newRow = <TableRow key={question.id} className="hover:bg-slate-100">
                 <TableCell className='w-full'>
-                    <div className=' flex flex-row w-full '>
-                        <div className='flex flex-col '>
+                    <div className='flex flex-row w-full gap-1'>
+                        <div className='flex flex-col items-center shrink-0'>
                             <OptionSelectionCheckbox
-                                isSelected = {this.props.newPaperDetails.selectedQuestionIds.includes(question.id)}
+                                isSelected = {isSelected}
                                 markAsSelected = {this.selectQuestionId}
                                 markAsUnselected = {this.unSelectQuestionId}
                                 identifier = {question.id}
+                                label = {'question ' + (index + 1)}
                             />
-                            <div className='flex justify-center py-1' 
-                                    onMouseLeave={()=>this.deactivateQuestionViewPopup(question.id)} 
-                                    onMouseEnter={()=>this.activateQuestionViewPopup(question.id)}
-                                    onMouseClick={()=>this.activateQuestionViewPopup(question.id)}
-                                >
-                                    {
-                                        this.props.questionSet.popupQuestionId !== question.id
-                                        ? <BsEyeFill color = {'gray'} className='w-4 h-4 sm:w-4 sm:h-4 md:w-5 md:h-5' onClick = {()=>this.activateQuestionViewPopup(question.id)}/>
-                                        : this.openQuestionSubmissionPopupView(question)
-                                    }
+                            {/* The preview used to open on hover (onMouseEnter) and
+                                close on mouse-out, with a third handler spelled
+                                `onMouseClick` — not a React event, so that one never
+                                fired at all. A hover-only preview cannot be opened on
+                                a touch screen or by keyboard, which is most of the
+                                ways someone would try. It is a normal modal trigger
+                                now, rendered for every row. */}
+                            <div className='flex justify-center py-1'>
+                                {this.openQuestionSubmissionPopupView(question)}
                             </div>
                         </div>
-                        <div className='flex flex-row w-full' >
-                            <div className="flex flex-col w-full" onClick = {()=>this.flipQuestionSelection(question.id)}>
-                                <div className='w-full'>
-                                    <p className={ nonClickableSearchTableBodyCellTextCSS + generalTextSize + "  w-full text-left text-black"}>
-                                        <div dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(question.description.substring(0,200))}}></div>
-                                    </p>
-                                </div>
-                                <div className='w-full'>
-                                    {this.getQuestionTagsDivJSX(question)}
-                                </div>
-                            </div>
-                        </div>
+                        {/* A real button, so the row can be selected from the keyboard.
+                            The clickable element used to be a <div>. */}
+                        <button
+                            type="button"
+                            className="flex flex-col w-full min-w-0 text-left px-1 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            onClick = {()=>this.flipQuestionSelection(question.id)}
+                            aria-pressed={isSelected}
+                        >
+                            {/* Was a <div> inside a <p> (invalid nesting), fed
+                                `description.substring(0,200)` — a raw HTML string cut
+                                at 200 characters, which routinely severed a tag or a
+                                LaTeX delimiter mid-sequence. The full body is passed
+                                through and clamped visually instead. */}
+                            <span
+                                className={nonClickableSearchTableBodyCellTextCSS + generalTextSize + ' block w-full text-left text-black line-clamp-3'}
+                                dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(question.description)}}
+                            />
+                            <span className='block w-full'>
+                                {this.getQuestionTagsDivJSX(question)}
+                            </span>
+                        </button>
                     </div>
                 </TableCell>
             </TableRow>
@@ -350,8 +375,9 @@ class QuestionSelectionConfigurationBox extends React.Component {
         this.props.saveQuestionSet(payload);
         QuestionsReceiver.getAllFilteredQuestions(this.props.questionSet.searchedKey, tagIds,[], updatedPageNumber, updatedPageSize).then(questionsData=>{
             let payload = {...this.props.questionSet};
-            payload.questions = this.normalise(questionsData.data, questionsData.data.pageCount);
-            payload.pageCount = questionsData.data.pageCount;
+            const page = dataOf(questionsData, EMPTY_PAGE);
+            payload.questions = this.normalise(page, page.pageCount);
+            payload.pageCount = page.pageCount;
             payload.currentPage = updatedPageNumber + 1;
             payload.currentPageSize = updatedPageSize;
             payload.isRefreshing = false;
@@ -372,14 +398,19 @@ class QuestionSelectionConfigurationBox extends React.Component {
             tagIds.push(tag.id);
         });
         QuestionsReceiver.getAllFilteredQuestions(this.props.questionSet.searchedKey, tagIds, [], this.props.currentPage).then(questionsData=>{
-            payload.questions = this.normalise(questionsData.data, questionsData.data.pageCount);
+            const page = dataOf(questionsData, EMPTY_PAGE);
+            payload.questions = this.normalise(page, page.pageCount);
             payload.currentPage = 1;
             this.props.saveQuestionSet(payload);
         });
     }
 
     handlePageChange = (event, value) => {
-        if(value<=0 || value>this.props.questionSet.pageCount) {
+        // Read the wrong path: pageCount lives on the response envelope
+        // (questionSet.questions.pageCount), not on the slice, so `value > undefined`
+        // was always false and the last page could be paged past indefinitely.
+        const pageCount = (this.props.questionSet.questions || {}).pageCount;
+        if(value<=0 || (pageCount != null && value>pageCount)) {
             return;
         }
         this.refreshSearch(value-1, this.props.questionSet.currentPageSize);
@@ -389,17 +420,31 @@ class QuestionSelectionConfigurationBox extends React.Component {
         this.refreshSearch(0, event.target.value);
     }
     toggleLoginPopOver = () => {
-        this.setState({"isPageSettingsConfigOpen" : this.state.isPageSettingsConfigOpen==undefined?true:!this.state.isPageSettingsConfigOpen});
+        this.setState({"isPageSettingsConfigOpen" : this.state.isPageSettingsConfigOpen===undefined?true:!this.state.isPageSettingsConfigOpen});
+    }
+
+    componentDidMount() {
+        // Was called from render().
+        if(this.props.questionSet === undefined){
+            this.initializeQuestions();
+        }
     }
 
     render() {
         if(this.props.questionSet === undefined){
-            this.initializeQuestions();
-            return  <div className='py-20' style={{minHeight: window.innerHeight*0.70}}>
-                    <ClipLoader color="#2563EB" size="60"/>
+            return  <div className='flex justify-center py-20' style={{minHeight: window.innerHeight*0.70}}>
+                    <ClipLoader color="#2563EB" size={60}/>
                 </div>
         }
-        return <div children="overflow-y-auto max-h-[49rem] min-h-[49rem] ...">
+        {/* This was `<div children="overflow-y-auto max-h-[49rem] min-h-[49rem] ...">`.
+            `children` is not `className`: the string was passed as the element's
+            children prop and then discarded, because JSX's nested children take
+            precedence over the attribute. The scroll container it describes never
+            existed, so the question picker had no height cap and no internal
+            scrolling — the paper builder grew to whatever length the result list
+            happened to be instead of scrolling inside a fixed panel beside the
+            section configuration. */}
+        return <div className="overflow-y-auto max-h-[49rem] min-h-[49rem]">
             <div className="w-full  shadow bg-white ">
                 <div className='px-3'><QuestionSetSearchBoxComponent/></div>
                 {this.getQuestionsTableJSX()}

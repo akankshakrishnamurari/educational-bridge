@@ -3,6 +3,7 @@ import Pagination from '@material-ui/lab/Pagination';
 import { Popover, ArrowContainer } from 'react-tiny-popover';
 import { AiFillSetting } from "react-icons/ai";
 import { pagesizeOptionTextSize, generalTextSize, pagingSelectionButtonStyle } from '../../../constants/TextSizeConstants';
+import { colors } from '../../../constants/designTokens';
 
 class PagingSection extends React.Component {
 
@@ -48,27 +49,36 @@ class PagingSection extends React.Component {
                 </div>
             </div>;
             return <Popover
-                isOpen={this.props.isPageSettingsConfigOpen==undefined?false:this.props.isPageSettingsConfigOpen}
-                positions={['right', 'bottom', 'left', 'up']} // preferred positions by priority
+                isOpen={this.props.isPageSettingsConfigOpen === true}
+                positions={['right', 'bottom', 'left', 'top']} // preferred positions by priority
                 content={({ position, childRect, popoverRect }) => (
-                    <ArrowContainer // if you'd like an arrow, you can import the ArrowContainer!
+                    <ArrowContainer
                     position={position}
                     childRect={childRect}
                     popoverRect={popoverRect}
-                    arrowColor={'blue'}
+                    // Was the raw CSS keyword 'blue' at 0.7 opacity, a colour used
+                    // nowhere else in the app.
+                    arrowColor={colors.gray[200]}
                     arrowSize={10}
-                    arrowStyle={{ opacity: 0.7 }}
                     className='popover-arrow-container'
                     arrowClassName='popover-arrow'
                     >
                     {popupContent}
                     </ArrowContainer>
                 )}
-                onClickOutside = {() => this.props.togglePageSettingPopover()}  
+                onClickOutside = {() => this.props.togglePageSettingPopover()}
             >
-                <div className='py-5' onClick={()=>this.props.togglePageSettingPopover()}>
-                    <AiFillSetting  size={30} color = {'gray'}/>
-                </div>
+                {/* Was a <div onClick>, so the page-size and jump-to-page controls
+                    could not be opened from the keyboard at all. */}
+                <button
+                    type="button"
+                    className='p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500'
+                    onClick={()=>this.props.togglePageSettingPopover()}
+                    aria-label="Page size and jump to page"
+                    aria-expanded={this.props.isPageSettingsConfigOpen === true}
+                >
+                    <AiFillSetting size={22} aria-hidden="true"/>
+                </button>
             </Popover>;
     }
 

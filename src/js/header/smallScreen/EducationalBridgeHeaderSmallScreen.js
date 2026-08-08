@@ -1,19 +1,23 @@
 import React from 'react';
 import { connect } from 'react-redux';
 import {saveUserDetails, updateGeneralInfo} from '../../../store/actions/solgressAction'
-import GoogleLogout from 'react-google-login';
-import {headerTextViewClass, logoTextCSS, headerLoginButtonViewClass, searchBoxCSS, headerLoginTextClass, searchBoxInputCSS} from '../../../constants/TextSizeConstants';
+// Named imports: the package default export is GoogleLogin, so the previous
+// `import GoogleLogout from 'react-google-login'` pulled in the sign-in component
+// under the name GoogleLogout. See the note in the large-screen header.
+import { GoogleLogin, GoogleLogout } from 'react-google-login';
+import { logoTextCSS } from '../../../constants/TextSizeConstants';
 import { currentURLHost, currentGoogleLoginAPIKey} from '../../../constants/hostConfig';
 import { Popover, ArrowContainer } from 'react-tiny-popover';
+import { colors } from '../../../constants/designTokens';
 import { VscSettings } from "react-icons/vsc";
 import { AiOutlineSearch } from "react-icons/ai";
-import { GoogleLogin } from 'react-google-login';
-// import styleHeader from '../../header/styleHeader.css'
 import EducationalBridgePopupBox from '../../coreCapabilities/EducationalBridgePopupBox';
 import TagFilterViewSmall from '../../questionSet/TagFilter/TagFilterViewSmall';
-import {BsArrowLeft, BsClipboardPlus} from "react-icons/bs";
+import {BsArrowLeft} from "react-icons/bs";
 import {FcGoogle} from "react-icons/fc"
+import {MdExitToApp} from "react-icons/md";
 import notify from '../../../utils/notify';
+import {UserDetailsUtil} from '../../../utils/UserDetailsUtil';
 
 const mapDispatchToProps = dispatch => ({
     saveUserDetails: (payload) => dispatch(saveUserDetails(payload)),
@@ -28,30 +32,41 @@ const mapStateToProps = state => {
     };
 }
 
+const MENU_ITEM_CLASS = 'block w-full text-left py-2.5 px-4 text-gray-700 text-sm hover:bg-primary-50 hover:text-primary-700 focus:outline-none focus:bg-primary-50 focus:text-primary-700 transition-colors';
+
 class EducationalBridgeHeaderSmallScreen extends React.Component {
 
     componentDidMount(){
-        this.setState(
-            {
-                documentLoaded:true,
-            }
-        );
+        // Was dispatched from inside render(). Moved out so rendering has no side
+        // effects.
+        if (typeof this.props.generalInfo === 'undefined') {
+            this.initializeTagFilterView();
+        }
     }
 
     initializeTagFilterView = () => {
         let generalInfo = {};
         generalInfo.isTagFilterViewActive = false;
         generalInfo.temporarySelectedTags=[];
-        generalInfo.selectedTags=[];        
+        generalInfo.selectedTags=[];
         generalInfo.isViewingQuestions = true;
         generalInfo.isViewingPapers = false;
         generalInfo.isSearchActive = false;
+        generalInfo.searchText = "";
+        let searchTextQueryParam = new URLSearchParams(window.location.search).get('search_text');
+        if(searchTextQueryParam!=null) {
+            generalInfo.searchText = searchTextQueryParam;
+        }
         this.props.updateGeneralInfo(generalInfo)
     }
 
     handleGoogleLoginResponse = (response) => {
         window.sessionStorage.setItem("userDetails", JSON.stringify(response.profileObj));
         this.props.saveUserDetails(response.profileObj);
+        // The large-screen header reloads here and this one did not, so on a phone
+        // the header kept rendering the "Log in" button until the next navigation
+        // even though the session had been stored.
+        window.location.reload();
     }
 
     handleGoogleLoginFailureResponse = () => {
@@ -61,14 +76,17 @@ class EducationalBridgeHeaderSmallScreen extends React.Component {
     }
 
     handleGoogleLogoutResponse = () => {
+        if (this.hasSignedOut) {
+            return;
+        }
+        this.hasSignedOut = true;
         window.sessionStorage.setItem("userDetails", null);
         this.props.saveUserDetails(undefined);
-        window.location.reload();
+        window.location.href = currentURLHost;
     }
 
     toggleLoginPopOver = () => {
-        // let userDetails = {...this.props.userDetails};
-        let userDetails = {... JSON.parse(window.sessionStorage.getItem("userDetails"))}
+        let userDetails = {...(UserDetailsUtil.getUserDetails() || {})}
         if(userDetails.isUserLoginContentPopupEnabled === null || userDetails.isUserLoginContentPopupEnabled === false) {
             userDetails["isUserLoginContentPopupEnabled"] = true;
         }
@@ -78,9 +96,9 @@ class EducationalBridgeHeaderSmallScreen extends React.Component {
         window.sessionStorage.setItem("userDetails",  JSON.stringify(userDetails));
         this.props.saveUserDetails(userDetails);
     }
-    
+
     toggleLoginPopOverWithoutReload = () => {
-        let userDetails = {... JSON.parse(window.sessionStorage.getItem("userDetails"))}
+        let userDetails = {...(UserDetailsUtil.getUserDetails() || {})}
         if(userDetails.isUserLoginContentPopupEnabled === null || userDetails.isUserLoginContentPopupEnabled === false) {
             userDetails["isUserLoginContentPopupEnabled"] = true;
         }
@@ -115,84 +133,97 @@ class EducationalBridgeHeaderSmallScreen extends React.Component {
     }
 
     getLoginLogoutButtonJSX = () => {
-        if(window.sessionStorage.getItem("userDetails") === null || window.sessionStorage.getItem("userDetails") === "null") {
-            // return  <div id = "signInDiv" className='flex w-full sm:justify-end'/>;
-            return <div className='bg-white rounded-full shadow-sm'>
-                    <GoogleLogin
-                        clientId = {currentGoogleLoginAPIKey}
-                        // buttonText = {"Login"}
-                        render={renderProps => (
-                            <div className='flex flex-row items-center pl-3 pr-4 rounded-full h-9'  onClick={renderProps.onClick} >
-                                <button className='pr-2 rounded flex items-center'>
-                                    <FcGoogle size={18}/>
-                                </button>
-                                <button className='text-primary-700 font-medium text-sm'>
-                                    Login
-                                </button>
-                            </div>
-                        )}
-                        onSuccess={this.handleGoogleLoginResponse}
-                        onFailure = {this.handleGoogleLoginFailureResponse}
-                        cookiePolicy = 'none'
-                    />
-            </div>;
-        } else {
-            let popupContent = <div className='w-screen md:w-64 py-2 bg-white rounded-lg shadow-lg border border-gray-100 z-50'>
-                <div className='z-50 py-2 px-4 text-gray-700 text-sm hover:bg-primary-50 hover:text-primary-700' onClick={this.moveToMySolvedPapers}>My Solved Papers</div>
-                <div className='z-50 py-2 px-4 text-gray-700 text-sm hover:bg-primary-50 hover:text-primary-700' onClick={this.moveToMySolvedQuestions}>My Solved Questions</div>
-                <div className='z-50 py-2 px-4 text-gray-700 text-sm hover:bg-primary-50 hover:text-primary-700' onClick={this.moveToMyCreatedPapers}>My created Papers</div>
-                <div className='z-50 py-2 px-4 text-gray-700 text-sm hover:bg-primary-50 hover:text-primary-700' onClick={this.moveToMyCreatedQuestions}>My Created Questions</div>
-                <div className='flex px-4 pt-1 justify-center' onClick={()=>this.handleGoogleLogoutResponse()}>
-                    <GoogleLogout
-                        clientId = {currentGoogleLoginAPIKey}
-                        buttonText="Logout"
-                    />
-                </div>
-            </div>;
-            return <Popover
-                isOpen={
-                    (window.sessionStorage.getItem("userDetails")==="null" || window.sessionStorage.getItem("userDetails")===undefined || JSON.parse(window.sessionStorage.getItem("userDetails")).hasOwnProperty('isUserLoginContentPopupEnabled') ===false)
-                        ? false
-                        : JSON.parse(window.sessionStorage.getItem("userDetails")).isUserLoginContentPopupEnabled
-                    }
-                positions={['bottom', 'left', 'right', 'up']} // preferred positions by priority
-                content={({ position, childRect, popoverRect }) => (
-                    <ArrowContainer // if you'd like an arrow, you can import the ArrowContainer!
-                      position={position}
-                      childRect={childRect}
-                      popoverRect={popoverRect}
-                      arrowColor={'blue'}
-                      arrowSize={10}
-                      arrowStyle={{ opacity: 0.7 }}
-                      className='popover-arrow-container'
-                      arrowClassName='popover-arrow'
+        if(!UserDetailsUtil.isSignedIn()) {
+            return <GoogleLogin
+                clientId = {currentGoogleLoginAPIKey}
+                render={renderProps => (
+                    <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 h-9 pl-2.5 pr-3 rounded-lg bg-white border border-gray-300 text-sm font-medium text-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60"
+                        onClick={renderProps.onClick}
+                        disabled={renderProps.disabled}
                     >
-                      {popupContent}
-                    </ArrowContainer>
-                  )}
-                  onClickOutside = {() => this.toggleLoginPopOver()}  
-            >
+                        <FcGoogle size={16} aria-hidden="true"/>
+                        Log in
+                    </button>
+                )}
+                onSuccess={this.handleGoogleLoginResponse}
+                onFailure = {this.handleGoogleLoginFailureResponse}
+                cookiePolicy = 'none'
+            />;
+        }
+        const userDetails = UserDetailsUtil.getUserDetails() || {};
+        let popupContent = <div className='w-64 py-2 bg-white rounded-lg shadow-lg border border-gray-100 z-50'>
+            <div className="px-4 pb-2 mb-1 border-b border-gray-100">
+                <div className="text-sm font-semibold text-gray-900 truncate">{userDetails.name || 'Your account'}</div>
+                {userDetails.email &&
+                    <div className="text-xs text-gray-500 truncate">{userDetails.email}</div>
+                }
+            </div>
+            <button type="button" className={MENU_ITEM_CLASS} onClick={this.moveToMySolvedQuestions}>Questions I've solved</button>
+            <button type="button" className={MENU_ITEM_CLASS} onClick={this.moveToMySolvedPapers}>Papers I've taken</button>
+            <button type="button" className={MENU_ITEM_CLASS} onClick={this.moveToMyCreatedQuestions}>Questions I've written</button>
+            <button type="button" className={MENU_ITEM_CLASS} onClick={this.moveToMyCreatedPapers}>Papers I've built</button>
+            <div className='flex px-3 pt-2 justify-center'>
+                {/* Was a <div onClick={logout}> wrapping GoogleLogout's own default
+                    button, so there were two overlapping click targets doing two
+                    different things inside one control. */}
+                <GoogleLogout
+                    clientId = {currentGoogleLoginAPIKey}
+                    onLogoutSuccess={this.handleGoogleLogoutResponse}
+                    onFailure={this.handleGoogleLogoutResponse}
+                    render={renderProps => (
+                        <button
+                            type="button"
+                            className='inline-flex items-center justify-center gap-1.5 w-full h-9 px-3 rounded-lg bg-danger-600 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-danger-500'
+                            onClick={() => {
+                                if (typeof renderProps.onClick === 'function') {
+                                    renderProps.onClick();
+                                }
+                                this.handleGoogleLogoutResponse();
+                            }}
+                        >
+                            <MdExitToApp size={18} aria-hidden="true"/>
+                            Sign out
+                        </button>
+                    )}
+                />
+            </div>
+        </div>;
+        return <Popover
+            isOpen={userDetails.isUserLoginContentPopupEnabled === true}
+            positions={['bottom', 'left', 'right', 'top']}
+            content={({ position, childRect, popoverRect }) => (
+                <ArrowContainer
+                    position={position}
+                    childRect={childRect}
+                    popoverRect={popoverRect}
+                    arrowColor={colors.gray[200]}
+                    arrowSize={10}
+                    className='popover-arrow-container'
+                    arrowClassName='popover-arrow'
+                >
+                    {popupContent}
+                </ArrowContainer>
+              )}
+              onClickOutside = {() => this.toggleLoginPopOver()}
+        >
             {/* The click handler used to sit on the <img> itself, so the account menu
-                could only be opened with a pointer — it was not reachable by keyboard
-                or to a screen reader. */}
+                could only be opened with a pointer. */}
             <button
+                type="button"
                 onClick={() => this.toggleLoginPopOver()}
+                className="rounded-full shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
                 aria-label="Open your account menu"
+                aria-expanded={userDetails.isUserLoginContentPopupEnabled === true}
             >
-                <img className="rounded-full w-9 h-9 "
-                    src={JSON.parse(window.sessionStorage.getItem("userDetails")).imageUrl}
+                <img className="rounded-full w-9 h-9 bg-gray-100 object-cover"
+                    src={userDetails.imageUrl}
                     alt=""
                     referrerPolicy="no-referrer"
                 />
             </button>
-          </Popover>;
-        }
-    }
-
-    getSideBarHamBurger = () => {
-        return <div className ={headerLoginButtonViewClass}>
-            {this.getLoginLogoutButtonJSX()}
-        </div>;
+        </Popover>;
     }
 
     updateSearchText = (event) => {
@@ -203,34 +234,27 @@ class EducationalBridgeHeaderSmallScreen extends React.Component {
         this.props.updateSearchText();
     }
 
-    getFilterViewJSX = () => {
-        let triggerJSX = <div className="">
-            <div className='flex flex-col' onClick={() => this.activateTagFilterView()}>
-                <div>
-                    <VscSettings size={22} color={"#475569"}></VscSettings>
-                </div>
-            </div>
-        </div>;
-
-        let postPopupContent = <TagFilterViewSmall/>;
-        let isPopupClosed = !this.props.generalInfo.isTagFilterViewActive ;
-        return <EducationalBridgePopupBox
-                popupModalClassName = " bg-white border  shadow flex w-screen"
-                popupTriggerContentClassName = ""
-                popupTriggerContent = {triggerJSX}
-                postPopupContentHeaderClassName = "bg-primary-100 border-t-2 border-l-2 border-r-2 rounded-t-lg border-gray-400"
-                postPopupContentHeader = "Filters"
-                postpopupContentClassName = "bg-white border-2 border-gray-400 rounded-b-lg"
-                postPopupContent = {postPopupContent}
-                isPopupClosed = {true}
-            />;
+    /**
+     * The compact header had no submit path at all: its search input had an onChange
+     * and nothing else, so on a phone there was no way to actually run a search from
+     * anywhere except the question list, where typing filters live. Pressing the
+     * on-screen keyboard's Go key did nothing.
+     */
+    submitSearch = () => {
+        const searchText = (this.props.generalInfo && this.props.generalInfo.searchText) || '';
+        const trimmed = searchText.trim();
+        if (trimmed === '') {
+            window.location.href = currentURLHost + "questions";
+            return;
+        }
+        window.location.href = currentURLHost + "questions?search_text=" + encodeURIComponent(trimmed);
     }
 
     enableSearchHeader = () => {
         let payload = {...this.props.generalInfo};
         payload.isSearchActive = true;
         this.props.updateGeneralInfo(payload);
-    }   
+    }
 
     inactivateSearchHeader = () => {
         let payload = {...this.props.generalInfo};
@@ -238,96 +262,117 @@ class EducationalBridgeHeaderSmallScreen extends React.Component {
         this.props.updateGeneralInfo(payload);
     }
 
-    activateTagFilterView = () => {
-        let payload = {...this.props.generalInfo};
-        payload.isTagFilterViewActive = true;
-        this.props.updateGeneralInfo(payload);
+    /**
+     * The filters sheet only has a list to filter on the question and paper list
+     * pages. The trigger used to render in the header on all fourteen routes, so on
+     * the home page, the solve page, the authoring forms and every dashboard it
+     * opened a sheet whose "Show results" button had no visible effect.
+     */
+    isFilterableRoute = () => {
+        if (typeof window === 'undefined') {
+            return false;
+        }
+        const path = window.location.pathname.replace(/\/+$/, '');
+        return path === '/questions' || path === '/papers';
+    }
+
+    /**
+     * The filters sheet trigger.
+     *
+     * There used to be two of these side by side: this one and a second identical
+     * popup behind a clipboard icon, wired to the same handler and showing the same
+     * "Filters" content. The clipboard looked like a "build a paper" action and did
+     * something else entirely, so it has been removed rather than relabelled.
+     *
+     * The active-search variant of this control also passed `isPopupClosed={true}`
+     * as a literal, which made the sheet render empty every time it opened — the
+     * filter button in search mode was simply dead.
+     */
+    getFilterPopupJSX = (iconSize) => {
+        if (!this.isFilterableRoute()) {
+            return null;
+        }
+        return <EducationalBridgePopupBox
+                popupModalClassName = " bg-white border shadow flex w-screen"
+                popupTriggerContentClassName = "p-1.5 rounded-lg text-gray-600 hover:bg-gray-100"
+                popupTriggerContent = {<VscSettings size={iconSize} aria-hidden="true"/>}
+                triggerAriaLabel = "Filters"
+                postPopupContentHeaderClassName = "bg-primary-100 border-t-2 border-l-2 border-r-2 rounded-t-lg border-gray-400"
+                postPopupContentHeader = "Filters"
+                postpopupContentClassName = "bg-white border-2 border-gray-400 rounded-b-lg"
+                postPopupContent = {<TagFilterViewSmall/>}
+                isPopupClosed = {false}
+            />;
     }
 
     getHeaderWithActiveSearch = () => {
-        return <div className="w-full bg-white border-b border-gray-200 pb-2">
-                <div>
-                    <div className="flex flex-row items-center pt-2">
-                        <div className='px-2' onClick={() => this.inactivateSearchHeader()}>
-                            <BsArrowLeft size={26} color="#475569"/>
+        return <div className="w-full bg-white">
+                <div className="flex flex-row items-center gap-1.5 h-14 px-2">
+                    <button
+                        type="button"
+                        className='p-1.5 rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500'
+                        onClick={() => this.inactivateSearchHeader()}
+                        aria-label="Close search"
+                    >
+                        <BsArrowLeft size={22} aria-hidden="true"/>
+                    </button>
+                    <form
+                        className='flex-1 min-w-0'
+                        role="search"
+                        onSubmit={(event) => { event.preventDefault(); this.submitSearch(); }}
+                    >
+                        <div className="relative">
+                            <AiOutlineSearch
+                                size={16}
+                                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                            />
+                            <input
+                                type="search"
+                                className="w-full h-9 pl-9 pr-3 text-sm text-gray-800 placeholder-gray-400 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:bg-white focus:border-primary-500"
+                                placeholder="Search questions and papers"
+                                value={this.props.generalInfo==null ||this.props.generalInfo.searchText==null ? "": this.props.generalInfo.searchText}
+                                onChange={(event) => this.updateSearchText(event)}
+                                aria-label="Search questions and papers"
+                                // eslint-disable-next-line jsx-a11y/no-autofocus
+                                autoFocus
+                            />
                         </div>
-                        <div className='flex-1 pr-2'>
-                            <div className={searchBoxCSS + ' flex grow items-center'}>
-                                <div className='py-1 pl-4 rounded-l-full'>
-                                    {this.getFilterViewJSX()}
-                                </div>
-                                <input 
-                                    type="text" 
-                                    className = { searchBoxInputCSS + " w-full focus:outline-none rounded"}
-                                    placeholder="Search questions and papers"
-                                    value={this.props.generalInfo==null ||this.props.generalInfo.searchText==null ? "": this.props.generalInfo.searchText}
-                                    onChange={(event) => this.updateSearchText(event)}
-                                />
-                            </div>    
-                        </div>
-                        <div className ={'flex flex-row justify-end pr-2 py-1 pl-1' }>  
-                            {this.getLoginLogoutButtonJSX()}
-                        </div>
-                    </div>
+                    </form>
+                    {this.getFilterPopupJSX(20)}
                 </div>
             </div>;
     }
 
     getHeaderWithInactiveSearch = () => {
-        let filterTriggerJSX = <button className='pr-3 pt-3' onClick={() => this.activateTagFilterView()}>
-            <VscSettings size={30} color={"#475569"} />
-        </button>
-        let filterPostPopupContent = <TagFilterViewSmall/>;
-        let isFiltePopupClosed = !this.props.generalInfo.isTagFilterViewActive ;
-        let filterPopup = <EducationalBridgePopupBox
-                popupModalClassName = " bg-white border  shadow flex w-screen"
-                popupTriggerContentClassName = ""
-                popupTriggerContent = {filterTriggerJSX}
-                postPopupContentHeaderClassName = "bg-primary-100 border-t-2 border-l-2 border-r-2 rounded-t-lg border-gray-400"
-                postPopupContentHeader = "Filters"
-                postpopupContentClassName = "bg-white border-2 border-gray-400 rounded-b-lg"
-                postPopupContent = {filterPostPopupContent}
-                isPopupClosed = {isFiltePopupClosed}
-            />;
-        let customPaperTriggerJSX = <button className='pr-4 pt-4' onClick={() => this.activateTagFilterView()}>
-            <BsClipboardPlus size={25} color={"#475569"} />
-        </button>
-        let customPaperPostPopupContent = <TagFilterViewSmall/>;
-        let isCustomPaperPopupClosed = !this.props.generalInfo.isTagFilterViewActive ;
-        let customPaperPopup = <EducationalBridgePopupBox
-                popupModalClassName = " bg-white border  shadow flex w-screen"
-                popupTriggerContentClassName = ""
-                popupTriggerContent = {customPaperTriggerJSX}
-                postPopupContentHeaderClassName = "bg-primary-100 border-t-2 border-l-2 border-r-2 rounded-t-lg border-gray-400"
-                postPopupContentHeader = "Filters"
-                postpopupContentClassName = "bg-white border-2 border-gray-400 rounded-b-lg"
-                postPopupContent = {customPaperPostPopupContent}
-                isPopupClosed = {isCustomPaperPopupClosed}
-            />;
-        return <div className="flex flex-row sticky top-0 z-max w-full h-14">
-                <div className="w-full">
-                    <div className="flex flex-row items-center w-full h-full">
-                        {/* Logo is capped below the bar height so it reads as a
-                            standard header logo rather than filling the whole bar. */}
-                        <button className={" flex items-center gap-1.5 h-full md:row-span-1 row-span-2 " + logoTextCSS}  onClick={() => window.location.href=currentURLHost}>
-                            <img src="/logo.svg" alt="" className="h-8 w-auto shrink-0" />
-                            <span className="whitespace-nowrap tracking-tight">
-                                <span className="font-normal">Educational</span><span className="font-extrabold text-primary-600">Bridge</span>
-                            </span>
+        return <div className="w-full">
+                <div className="flex flex-row items-center gap-1 w-full h-14 px-2">
+                    <button
+                        type="button"
+                        className={"flex items-center gap-1.5 min-w-0 px-1 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded " + logoTextCSS}
+                        onClick={() => window.location.href=currentURLHost}
+                        aria-label="EducationalBridge home"
+                    >
+                        <img src="/logo.svg" alt="" className="h-8 w-auto shrink-0" />
+                        <span className="whitespace-nowrap tracking-tight">
+                            <span className="font-normal">Educational</span><span className="font-extrabold text-primary-600">Bridge</span>
+                        </span>
+                    </button>
+                    <div className='flex flex-row items-center justify-end gap-1 ml-auto shrink-0'>
+                        <button
+                            type="button"
+                            className='p-1.5 rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500'
+                            onClick={() => this.enableSearchHeader()}
+                            aria-label="Search"
+                        >
+                            <AiOutlineSearch size={22} aria-hidden="true"/>
                         </button>
-                        <div className ={'flex flex-row items-center justify-end pr-4 py-2 pl-2 flex-1' }>
-                            <button className='pr-2' onClick={() => this.enableSearchHeader()}>
-                                <AiOutlineSearch size={26} color={"#475569"} ></AiOutlineSearch>
-                            </button>  
-                            {
-                                this.props.generalInfo.isSearchActive
-                                    ? ""
-                                    : filterPopup
-                            }
-                            <button>
-                                {this.getLoginLogoutButtonJSX()}
-                            </button>
-                        </div>
+                        {this.getFilterPopupJSX(22)}
+                        {/* This was wrapped in an outer <button>, and
+                            getLoginLogoutButtonJSX returns a <button> — a button
+                            inside a button is invalid HTML, and browsers resolve it by
+                            closing the outer element early, which broke the layout of
+                            the whole action cluster. */}
+                        {this.getLoginLogoutButtonJSX()}
                     </div>
                 </div>
             </div>;
@@ -335,12 +380,11 @@ class EducationalBridgeHeaderSmallScreen extends React.Component {
 
     render(){
         if(typeof this.props.generalInfo == `undefined`){
-            this.initializeTagFilterView();
             return <div/>
         }
-        return <div className = "sticky top-0 bg-white border-b border-gray-200 flex flex-row">
+        return <header className="sticky top-0 z-max bg-white border-b border-gray-200 flex flex-row">
                 {this.props.generalInfo.isSearchActive?this.getHeaderWithActiveSearch():this.getHeaderWithInactiveSearch()}
-            </div>
+            </header>
     }
 }
 

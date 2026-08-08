@@ -14,6 +14,12 @@ import QuestionPalette from '../../components/paperSet/QuestionPalette';
 import ExamTimer from '../../components/paperSet/ExamTimer';
 import StatTile from '../../components/common/StatTile';
 import { typography, layout } from '../../constants/designTokens';
+import { dataOf } from '../../apis/unwrap';
+import ErrorState from '../../components/common/ErrorState';
+
+// Fallback shape for the paged list endpoint, used when a request fails so
+// render paths that read `.questions` / `.pageCount` keep working.
+
 
 // Timed paper surface.
 //
@@ -50,7 +56,7 @@ class PaperView extends React.Component {
 
     constructor(props) {
         super(props)
-        this.state = { isConfirmingSubmit: false, isSubmitting: false };
+        this.state = { isConfirmingSubmit: false, isSubmitting: false, loadFailed: false };
     }
 
     componentDidMount() {
@@ -87,16 +93,29 @@ class PaperView extends React.Component {
             "questionsMarkedForReviews": []
         };
         PaperAPIsConnector.getPaperDetails(paperId, paperInstanceId).then( paperData => {
-            payload.paper = paperData.data;
-            payload.questions = PaperViewHelperUtil.normalise(paperData.data);
-            payload.paperStartTime = paperData.data.paperSubmissionResponse.paperStartTime;
-            let isNewPaper = (paperData.data.paperSubmissionResponse.currentQuestionNumber==null);
+            // Every field below used to be read straight off `paperData.data`. A
+            // failed request resolves with null, so opening a paper while the API was
+            // unreachable threw a TypeError here and left the page on its spinner
+            // forever — during a timed exam, with no indication of what went wrong.
+            const paper = dataOf(paperData);
+            if (paper === null) {
+                this.setState({ loadFailed: true });
+                return;
+            }
+            payload.paper = paper;
+            payload.questions = PaperViewHelperUtil.normalise(paper);
+
+            // `paperSubmissionResponse` is absent on a paper that has never been
+            // opened, so it is read defensively rather than assumed.
+            const submission = paper.paperSubmissionResponse || {};
+            payload.paperStartTime = submission.paperStartTime;
+            const isNewPaper = (submission.currentQuestionNumber == null);
             if(!isNewPaper) {
-                payload.currentQuestionNumber = paperData.data.paperSubmissionResponse.currentQuestionNumber;
-                payload.questionStartTime = paperData.data.paperSubmissionResponse.questionStartTime==null?Date.now():paperData.data.paperSubmissionResponse.questionStartTime;
-                payload.questionWiseTimeSpent = paperData.data.paperSubmissionResponse.questionWiseTimeSpent==null?{}:paperData.data.paperSubmissionResponse.questionWiseTimeSpent;
-                payload.questionsMarkedForReviews = [...paperData.data.paperSubmissionResponse.questionsMarkedForReviews];
-                payload.candidateResponses = this.buildCandidateResponse(paperData.data);
+                payload.currentQuestionNumber = submission.currentQuestionNumber;
+                payload.questionStartTime = submission.questionStartTime == null ? Date.now() : submission.questionStartTime;
+                payload.questionWiseTimeSpent = submission.questionWiseTimeSpent == null ? {} : submission.questionWiseTimeSpent;
+                payload.questionsMarkedForReviews = [...(submission.questionsMarkedForReviews || [])];
+                payload.candidateResponses = this.buildCandidateResponse(paper);
             }
             this.props.savePaperDetails(payload);
         });
@@ -104,8 +123,15 @@ class PaperView extends React.Component {
 
     buildCandidateResponse = (paperData) => {
         let candidateResponses = {};
-        paperData.paperSubmissionResponse.questionSubmittedResponses.forEach ( questionResponse => {
-            candidateResponses[questionResponse.questionData.id] = questionResponse.selectedOptionId;
+        // Both levels are optional: a paper opened but not yet answered has no
+        // submitted responses, and the nested `questionData` is absent on rows the
+        // adapter could not resolve.
+        const submitted = (paperData && paperData.paperSubmissionResponse
+            && paperData.paperSubmissionResponse.questionSubmittedResponses) || [];
+        submitted.forEach ( questionResponse => {
+            if (questionResponse && questionResponse.questionData && questionResponse.questionData.id) {
+                candidateResponses[questionResponse.questionData.id] = questionResponse.selectedOptionId;
+            }
         });
         return candidateResponses;
     }
@@ -381,11 +407,25 @@ class PaperView extends React.Component {
         if(typeof window == `undefined`){
             return <div/>;
         }
+        if (this.state.loadFailed === true) {
+            return <div className='bg-gray-50 min-h-screen'>
+                <EducationalBridgeHeader/>
+                <div className={layout.container + ' py-10'}>
+                    <ErrorState
+                        title="We couldn&rsquo;t open this paper"
+                        description="Your answers so far are saved on the server. Reload to continue where you left off."
+                        onRetry={() => { this.setState({ loadFailed: false }); this.initializePaperDetails(); }}
+                    />
+                </div>
+            </div>;
+        }
         if(this.props.paperDetails === undefined || this.props.paperDetails.questions === undefined) {
             return <div className='bg-gray-50 min-h-screen'>
                 <EducationalBridgeHeader/>
                 <div className='flex justify-center py-20'>
-                    <ClipLoader color="#2563EB" size="60"/>
+                    {/* `size` must be a number: react-spinners multiplies it, so the
+                        string "60" produced NaN-based CSS. */}
+                    <ClipLoader color="#2563EB" size={60}/>
                 </div>
             </div>;
         }

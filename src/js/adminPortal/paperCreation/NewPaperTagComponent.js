@@ -1,241 +1,202 @@
 import React from 'react';
 import TagReceiver from "../../../apis/TagReceiver";
 import { connect } from 'react-redux';
-import {updateNewPaperDetails, saveQuestionSet} from "../../../store/actions/solgressAction";
+import {updateNewPaperDetails} from "../../../store/actions/solgressAction";
 import {currentURLHost} from './../../../constants/hostConfig';
-import { JSXUtils } from '../../../utils/JSXUtils';
-import { generalTextSize } from '../../../constants/TextSizeConstants';
+import { AiOutlineClose, AiOutlinePlus, AiOutlineSearch } from "react-icons/ai";
+import { listOf } from '../../../apis/unwrap';
+
+const SEARCH_DEBOUNCE_MS = 300;
 
 const mapDispatchToProps = dispatch => ({
     updateNewPaperDetails: (payload) => dispatch(updateNewPaperDetails(payload)),
-    saveQuestionSet: (payload) => dispatch(saveQuestionSet(payload)),
 })
 
 
 const mapStateToProps = state => {
     return {
-        newPaperDetails: state.solgressReducer.newPaperDetails,
-        questionSet: state.solgressReducer.questionSet
+        newPaperDetails: state.solgressReducer.newPaperDetails
     };
 }
 
+/**
+ * Tags for a paper, so learners can find it by subject or exam.
+ *
+ * WHAT WAS WRONG
+ * --------------
+ *   - The suggestion list opened on `onMouseEnter` and closed on `onMouseLeave` of
+ *     the input's wrapper. It closed on the way to the suggestion being reached for,
+ *     and on a touch screen it could not be opened at all.
+ *   - Suggestions and remove buttons were `<div onClick>` with no `key`: not
+ *     focusable, and re-created on every keystroke.
+ *   - `render()`'s guard tested whether `newPaperDetails` might be undefined and
+ *     then immediately read a property off it, so the "not loaded" branch threw. It
+ *     also called `initializeTagDetails()` from render, dispatching redux mid-render.
+ *   - `initializeTagDetails` read `payload.tags.length` before anything had set
+ *     `tags`, so it threw whenever the builder state was fresh.
+ *   - The suggestion query fired per keystroke with no ordering guarantee.
+ *   - `getTagFlexScrollableHeightCSSClass` picked one of four fixed heights and had
+ *     no call site.
+ *   - Every remove icon used `fill-rule`, which is not a React attribute and was
+ *     dropped, so the two crossing strokes rendered with the wrong fill rule.
+ */
 class NewPaperTagComponent extends React.Component {
 
     constructor(props) {
-        super(props)
-        this.state = {};
-        this.initializeTagDetails = this.initializeTagDetails.bind(this);
-        this.activateTagSearch = this.activateTagSearch.bind(this);
-        this.addNewTag = this.addNewTag.bind(this);
+        super(props);
+        this.state = { query: '', suggestions: [], isOpen: false };
     }
 
-    initializeTagDetails = async () => {
-        let payload = {...this.props.newPaperDetails};
-        payload.hasTagDetailsBeenInitialized = true;
-        this.props.updateNewPaperDetails(payload);
-        await TagReceiver.getSuggestedTags('').then(tagData=>{
-            let suggestedTags = [...tagData.data];
-            let existingTagIds = [];
-            for(let i=0; i<payload.tags.length; i++) {
-                existingTagIds.push(payload.tags[i].id);
+    componentDidMount() {
+        this.fetchSuggestions('');
+    }
+
+    componentWillUnmount() {
+        if (this.timer != null) {
+            clearTimeout(this.timer);
+        }
+    }
+
+    getAttachedTags = () => {
+        const tags = this.props.newPaperDetails && this.props.newPaperDetails.tags;
+        return Array.isArray(tags) ? tags : [];
+    }
+
+    fetchSuggestions = (query) => {
+        this.latestQuery = query;
+        TagReceiver.getSuggestedTags(query).then(tagData=>{
+            if (this.latestQuery !== query) {
+                return;
             }
-            suggestedTags = suggestedTags.filter(function(tag) {return !existingTagIds.includes(tag.id)});
-            payload = Object.assign({searchedTagKey: ""}, payload);
-            payload = Object.assign({isSearchingForTagActive: false}, payload);
-            payload = Object.assign({suggestedTags: suggestedTags}, payload);
-            this.props.updateNewPaperDetails(payload);
+            const attachedIds = this.getAttachedTags().map((tag) => tag.id);
+            this.setState({
+                suggestions: listOf(tagData).filter((tag) => tag && !attachedIds.includes(tag.id)),
+            });
         });
     }
 
-    activateTagSearch = () => {
-        let payload = {...this.props.newPaperDetails};
-        if(payload.isSearchingForTagActive) {
+    onQueryChange = (query) => {
+        this.setState({ query, isOpen: true });
+        if (this.timer != null) {
+            clearTimeout(this.timer);
+        }
+        this.timer = setTimeout(() => this.fetchSuggestions(query), SEARCH_DEBOUNCE_MS);
+    }
+
+    addNewTag = (tagToAdd) => {
+        if (tagToAdd == null || tagToAdd.id == null) {
             return;
         }
-        payload.isSearchingForTagActive = true;
-        this.props.updateNewPaperDetails(payload);
-    }
-
-    deactivateTagSearch = () => {
-        let payload = {...this.props.newPaperDetails};
-        payload.isSearchingForTagActive = false;
-        this.props.updateNewPaperDetails(payload);
-    }
-
-    updateSearchedTagKey = (event) => {
-        let payload = {...this.props.newPaperDetails};
-        payload.searchedTagKey = event.target.value;
-        this.props.updateNewPaperDetails(payload);
-        TagReceiver.getSuggestedTags(event.target.value).then(tagData=>{
-            let payload = {...this.props.newPaperDetails};
-
-            let suggestedTags = [...tagData.data];
-            let existingTagIds = [];
-            for(let i=0; i<payload.tags.length; i++) {
-                existingTagIds.push(payload.tags[i].id);
-            }
-            suggestedTags = suggestedTags.filter(function(tag) {return !existingTagIds.includes(tag.id)});
-            payload.suggestedTags = suggestedTags;
-            // payload = Object.assign({suggestedTags: suggestedTags}, payload);   
-            this.props.updateNewPaperDetails(payload);
+        this.setState((previous) => ({
+            isOpen: false,
+            suggestions: previous.suggestions.filter((tag) => tag.id !== tagToAdd.id),
+        }));
+        this.props.updateNewPaperDetails({
+            ...this.props.newPaperDetails,
+            tags: [...this.getAttachedTags(), tagToAdd],
         });
-    }
-
-    addNewTag = (index) => {
-        let payload = {...this.props.newPaperDetails};
-        let tags = [...payload.tags];
-        let suggestedTags = [...this.props.newPaperDetails.suggestedTags];
-        tags.push(suggestedTags[index]);
-        let tagId = suggestedTags[index].id;
-        suggestedTags = suggestedTags.filter(function(tag) { return tag.id !== tagId});
-        payload.tags = tags;
-        payload.isSearchingForTagActive = false;
-        payload.suggestedTags = suggestedTags;
-        this.props.updateNewPaperDetails(payload);
     }
 
     removeTag = (tagId) => {
-        let payload = {...this.props.newPaperDetails};
-        let tags = [...payload.tags];
-        let suggestedTags = [...payload.suggestedTags];
-        suggestedTags.push(tags.filter(function(tag) {return tag.id === tagId})[0]);
-        tags = tags.filter(function(tag) {return tag.id !== tagId});
-        payload.tags = tags;
-        payload.suggestedTags = suggestedTags;
-        this.props.updateNewPaperDetails(payload);
-    }
-
-    showSuggestedTags = () => {
-        if (this.props.newPaperDetails.isSearchingForTagActive === false) {
-            return;
-        }
-        let response = [];
-        let suggestedTags = [...this.props.newPaperDetails.suggestedTags];
-        for(let index=0; index<suggestedTags.length; index++) {
-            response.push(
-                <div className={generalTextSize + " py-1 border bg-slate-100 hover:bg-gray-50 w-full z-50"}  onClick={()=>this.addNewTag(index)} >
-                    <b>+ </b>
-                    {suggestedTags[index].tagName}
-                </div>
-            );
-        }
-        response.push(
-            <button className={" my-1 transition-colors rounded border border-gray-300 py-2 bg-white text-gray-700 hover:bg-gray-50 " + generalTextSize  + " focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"}
-                onClick={() => window.open(currentURLHost + 'tags/new')}>
-                <p className={generalTextSize + " px-2"}>
-                    Request New Tag
-                </p>
-            </button>
-        );
-        return response;
-    }
-
-    getTagFlexScrollableHeightCSSClass = () => {
-        let numberOfSuggestedTags = this.props.newPaperDetails.suggestedTags.length;
-        if (numberOfSuggestedTags === 0) {
-            return "h-20";
-        }
-        else if (numberOfSuggestedTags <= 1 ) {
-            return "h-40";
-        }
-        else if (numberOfSuggestedTags <=3 ) {
-            return "h-60";
-        }
-        return "h-72";
-    }
-
-    showSelectedTags = () => {
-        let response = [];
-        if(this.props.newPaperDetails.tags.length === 0) {
-            return;
-        }
-        response.push(<div>
-            <div className={"px-6  py-2 " + generalTextSize + " leading-tight text-gray-800 "}>
-                Applied Tags :
-            </div>
-        </div>
-        );
-        this.props.newPaperDetails.tags.forEach(element => {
-            response.push(
-                <div className="flex flex-row">
-                    <div className="py-2 ">{JSXUtils.getTagViewJSX(element.tagName)}</div>
-                    <div className="px-1 pr-3" onClick={()=>this.removeTag(element.id)}>
-                        <div className={"flex my-2 transition-colors rounded bg-gray-100 border border-gray-300 py-2 text-gray-600 " + generalTextSize + " hover:bg-danger-50 hover:text-danger-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-danger-500"}>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="8"
-                                     fill="currentColor" className="bi bi-x-lg" viewBox="0 0 16 16">
-                                    <path fill-rule="evenodd"
-                                          d="M13.854 2.146a.5.5 0 0 1 0 .708l-11 11a.5.5 0 0 1-.708-.708l11-11a.5.5 0 0 1 .708 0Z"/>
-                                    <path fill-rule="evenodd"
-                                          d="M2.146 2.146a.5.5 0 0 0 0 .708l11 11a.5.5 0 0 0 .708-.708l-11-11a.5.5 0 0 0-.708 0Z"/>
-                                </svg>
-                        </div>
-                    </div>
-                </div>
-            );
+        const removed = this.getAttachedTags().find((tag) => tag.id === tagId);
+        this.props.updateNewPaperDetails({
+            ...this.props.newPaperDetails,
+            tags: this.getAttachedTags().filter((tag) => tag.id !== tagId),
         });
-        return response;
+        if (removed) {
+            this.setState((previous) => ({ suggestions: [...previous.suggestions, removed] }));
+        }
+    }
+
+    getAppliedTagsJSX = () => {
+        const attached = this.getAttachedTags();
+        if (attached.length === 0) {
+            return null;
+        }
+        return <div className='flex flex-wrap items-center gap-1.5 pb-2'>
+            <span className='text-xs font-semibold text-gray-500 uppercase tracking-wide mr-1'>Applied</span>
+            {attached.map((tag) => (
+                <span
+                    key={tag.id}
+                    className='inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full bg-primary-50 text-primary-700 text-xs font-medium'
+                >
+                    <span className='truncate max-w-[14rem]'>{tag.tagName}</span>
+                    <button
+                        type="button"
+                        className='p-0.5 rounded-full hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500'
+                        aria-label={'Remove tag ' + tag.tagName}
+                        onClick={()=>this.removeTag(tag.id)}
+                    >
+                        <AiOutlineClose size={11} aria-hidden="true"/>
+                    </button>
+                </span>
+            ))}
+        </div>;
+    }
+
+    getSuggestionsJSX = () => {
+        if (!this.state.isOpen || this.state.suggestions.length === 0) {
+            return null;
+        }
+        return <ul className='absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-md py-1'>
+            {this.state.suggestions.map((tag) => (
+                <li key={tag.id}>
+                    <button
+                        type="button"
+                        className='flex items-center gap-2 w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 focus:outline-none focus:bg-gray-50'
+                        onClick={()=>this.addNewTag(tag)}
+                    >
+                        <AiOutlinePlus size={13} className='shrink-0 text-gray-400' aria-hidden="true"/>
+                        <span className='truncate'>{tag.tagName}</span>
+                    </button>
+                </li>
+            ))}
+        </ul>;
     }
 
     render() {
-        if(this.props.newPaperDetails === undefined || this.props.newPaperDetails.suggestedTags === undefined) {
-            if(this.props.newPaperDetails.hasTagDetailsBeenInitialized !== true) {
-                this.initializeTagDetails();
-            }
+        if (this.props.newPaperDetails === undefined) {
             return <div/>;
         }
-        return (
-            <div className="w-full pb-2">
-                <div className="flex flex-row">
-                    {this.showSelectedTags()}
+        return <div className="w-full pb-2">
+            {this.getAppliedTagsJSX()}
+            <div className='flex flex-col sm:flex-row sm:items-center gap-2'>
+                <label
+                    className='text-sm font-medium text-gray-700 shrink-0'
+                    htmlFor="paper-tag-search"
+                >
+                    Tags
+                </label>
+                <div className='relative w-full sm:max-w-md'>
+                    <AiOutlineSearch
+                        size={15}
+                        className='absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none'
+                    />
+                    <input
+                        id="paper-tag-search"
+                        type="text"
+                        className='w-full h-10 pl-9 pr-3 text-sm text-gray-800 placeholder-gray-400 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-100'
+                        placeholder="Search and add tags"
+                        value={this.state.query}
+                        onChange={(event)=>this.onQueryChange(event.target.value)}
+                        onFocus={()=>this.setState({ isOpen: true })}
+                        // Delay lets a click on a suggestion land before the list
+                        // unmounts; the previous onMouseLeave version raced against it.
+                        onBlur={()=>setTimeout(()=>this.setState({ isOpen: false }), 150)}
+                    />
+                    {this.getSuggestionsJSX()}
                 </div>
-                {/* <div className="bg-gray-50">
-                    <div className="flex flex-col pt-4 ">
-                        <div className="flex flex-row">
-                            <div>
-                                <p className="px-6  py-2 text-base leading-tight text-gray-800 ">
-                                    Tags:
-                                </p>
-                            </div>
-                            <div className=" flex justify-center items-center">
-                                <div className="relative" onMouseLeave={()=>this.deactivateTagSearch()} onMouseEnter={()=>this.activateTagSearch()}>
-                                    <input 
-                                        type="text" 
-                                        className="resize  bg-gray-200 h-10 w-full pr-8 pl-5 rounded z-0 focus:shadow focus:outline-none" 
-                                        placeholder="Search and add tags..."
-                                        onChange={(event)=>this.updateSearchedTagKey(event)}
-                                    />
-                                    <div className='absolute w-full z-50 bg-white border boarder-black'>
-                                        {this.showSuggestedTags()}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div> */}
-                <div className="flex flex-col pt-2 ">
-                    <div className="flex lg:flex-row justify-start">
-                        <div className='px-5'>
-                            <p className={generalTextSize + " py-3 leading-tight text-gray-800 "}>
-                                Tags :
-                            </p>
-                        </div>
-                        <div className="w-full md:w-4/12" onMouseLeave={()=>this.deactivateTagSearch()} onMouseEnter={()=>this.activateTagSearch()}>
-                            <input 
-                                type="text" 
-                                className=" bg-white h-10 w-full pr-8 pl-5 rounded z-0 focus:shadow focus:outline-none border border-slate-300" 
-                                placeholder="Search and add tags..."
-                                value = {
-                                        this.props.newPaperDetails.searchedTagKey
-                                }
-                                onChange={(event)=>this.updateSearchedTagKey(event)}
-                                onClick = {this.activateTagSearch}
-                            />
-                                {this.showSuggestedTags()}
-                        </div>
-                    </div>
-                </div>
-            </div> 
-        );
+                <a
+                    href={currentURLHost + 'tags/new'}
+                    target="_blank"
+                    rel="noreferrer"
+                    className='shrink-0 inline-flex items-center gap-1.5 text-sm font-semibold text-primary-600 hover:text-primary-700 focus:outline-none focus:underline'
+                >
+                    <AiOutlinePlus size={13} aria-hidden="true"/>
+                    New tag
+                </a>
+            </div>
+        </div>;
     }
 
 }

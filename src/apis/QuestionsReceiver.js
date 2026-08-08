@@ -1,278 +1,153 @@
-import {savePaperDetails} from "../store/actions/solgressAction";
-import React from 'react';
-import {currentHost} from './../constants/hostConfig';
-import { CatchingPokemon } from "@mui/icons-material";
-import { UserDetailsUtil } from "../utils/UserDetailsUtil";
-import { logError } from '../utils/logger';
+import { currentHost } from './../constants/hostConfig';
+import { UserDetailsUtil } from '../utils/UserDetailsUtil';
+import { requestJson, postJson } from './httpClient';
 
-const mapDispatchToProps = dispatch => ({
-    savePaperDetails: (payload) => dispatch(savePaperDetails(payload))
-})
+// Question API.
+//
+// Every method resolves with `{data}` on success or `null` on any failure — see
+// apis/httpClient.js for why that uniformity matters. Callers must null-check.
+//
+// Removed in this pass:
+//  * `getQuestions()`, which fetched `paper?paper_id=12313` — a hardcoded test
+//    paper id behind a method named after questions. Nothing called it.
+//  * An unused `CatchingPokemon` icon import, which pulled @mui/icons-material
+//    into the bundle.
+//  * `mapStateToProps` / `mapDispatchToProps` and a `savePaperDetails` import.
+//    This is a static utility class; it was never connected to the store and
+//    never needed to extend React.Component.
 
+const encode = (value) => encodeURIComponent(value === null || value === undefined ? '' : value);
 
-const mapStateToProps = state => {
-    return {
-        paperDetails: state.solgressReducer.paperDetails
-    };
-}
+class QuestionsReceiver {
 
-class QuestionsReceiver extends React.Component  {
-
-    static getQuestions = async() => {
-        try {
-            const response = await fetch(currentHost + 'paper?paper_id=12313');
-            let data = await response.json();
-            return {data};
-        }
-        catch (e) {
-            logError('QuestionsReceiver.getQuestions', e);
-            return null;
-        }
+    static getAllFilteredQuestions = async (searchKey, tagIds, channelIds, currentPage, pageSize) => {
+        const size = (pageSize === null || pageSize === undefined) ? 10 : pageSize;
+        const start = (currentPage === undefined || currentPage === null) ? 0 : currentPage;
+        // Values are URL-encoded now. A search for "a & b" or a tag label
+        // containing "&" previously truncated the query string and silently
+        // returned the wrong result set.
+        const url = currentHost + 'questions?search_key=' + encode(searchKey)
+            + '&tag_ids=' + encode(tagIds)
+            + '&channel_ids=' + encode(channelIds)
+            + '&question_ids='
+            + '&page_start_index=' + encode(start)
+            + '&page_size=' + encode(size);
+        return requestJson('QuestionsReceiver.getAllFilteredQuestions', url);
     }
 
-    static getAllFilteredQuestions = async(searchKey, tagIds, channelIds, currentPage, pageSize) => {
-        try {
-            let updatedPageSize = (pageSize==null || pageSize == undefined)?10:pageSize;
-            let response = await fetch(
-                currentHost + 'questions?search_key=' + searchKey
-                + "&tag_ids="+ tagIds
-                + "&channel_ids=" + channelIds
-                + "&question_ids="
-                + "&page_start_index="+ (currentPage==undefined?0:currentPage)
-                + "&page_size="+ updatedPageSize
-            )
-            let data = await response.json();
-            return {data};
-        }
-        catch (e) {
-            logError('QuestionsReceiver.getAllFilteredQuestions', e);
-            return {};
-        }
+    static getQuestionsByQuestionIds = async (questionIds) => {
+        const ids = questionIds || [];
+        const size = ids.length < 1 ? 1 : ids.length;
+        // `pageSize` was computed with a floor of 1 and then ignored in favour of
+        // `questionIds.length`, so an empty list requested page_size=0 and came
+        // back empty regardless of the floor.
+        const url = currentHost + 'questions?question_ids=' + encode(ids)
+            + '&tag_ids=&channel_ids=&search_key=&page_start_index=0&page_size=' + size;
+        return requestJson('QuestionsReceiver.getQuestionsByQuestionIds', url);
     }
 
-    static getQuestionsByQuestionIds = async(questionIds) => {
-        try {
-            let pageSize = questionIds.length;
-            if(pageSize<1) {
-                pageSize = 1;
-            }
-            let response = await fetch(
-                currentHost + 'questions?question_ids=' + questionIds + "&tag_ids=&channel_ids=&search_key=&page_start_index=0&page_size="+questionIds.length
-            )
-            let data = await response.json();
-            return {data};
-        }
-        catch (e) {
-            logError('QuestionsReceiver.getQuestionsByQuestionIds', e);
-            return {};
-        }
+    static getQuestion = async (questionId) => requestJson(
+        'QuestionsReceiver.getQuestion',
+        currentHost + 'question?question_id=' + encode(questionId)
+    )
+
+    static getSubmittedQuestion = async (responseId) => requestJson(
+        'QuestionsReceiver.getSubmittedQuestion',
+        currentHost + 'question/submission?response_id=' + encode(responseId)
+    )
+
+    static submitQuestionResponse = async (questionId, selectedOptionId, questionRequestTime) => {
+        // The `user_email` parameter carries a Google id, not an email. That is a
+        // backend naming problem; the value has to stay as-is because submissions
+        // are stored against it. A dead local `userEmail` was being computed from
+        // sessionStorage here and then discarded.
+        const userId = UserDetailsUtil.getUserGoogleId();
+        const url = currentHost + 'question/submit?question_id=' + encode(questionId)
+            + '&option_id=' + encode(selectedOptionId)
+            + '&user_email=' + encode(userId)
+            + '&question_request_time=' + encode(questionRequestTime);
+        return postJson('QuestionsReceiver.submitQuestionResponse', url);
     }
 
-    static getQuestion = async(questionId) => {
-        try {
-            const response = await fetch(currentHost + 'question?question_id='+questionId);
-            let data = await response.json();
-            return {data};
-        }
-        catch (e) {
-            logError('QuestionsReceiver.getQuestion', e);
-            return null;
-        }
-    }
+    static upsertQuestion = async (questionData) => postJson(
+        // This method never worked. It called `fetch(...)` without awaiting and
+        // then `response.json()` on the pending promise, which always throws, so
+        // it always reported failure even when the write had gone through.
+        'QuestionsReceiver.upsertQuestion',
+        currentHost + 'question',
+        questionData
+    )
 
-    static getSubmittedQuestion = async(responseId) => {
-        try {
-            const response = await fetch(currentHost + 'question/submission?response_id=' + responseId);
-            let data = await response.json();
-            return {data};
-        }
-        catch (e) {
-            logError('QuestionsReceiver.getSubmittedQuestion', e);
-            return null;
-        }
-    }
+    static getUserSubmmittedQuestionsSummary = async (userEmail) => requestJson(
+        'QuestionsReceiver.getUserSubmmittedQuestionsSummary',
+        currentHost + 'question/submission/summary/user?user_email=' + encode(userEmail)
+    )
 
-    static submitQuestionResponse = async(questionId, selectedOptionId, questionRequestTime) => {
-        try {
-            let userDetails = window.sessionStorage.userDetails;
-            let userEmail = '';
-            if(userDetails!=null && userDetails != "null" && userDetails!=undefined) {
-                userEmail = JSON.parse(userDetails).email;
-            }
-            const url = currentHost + 'question/submit?question_id='+questionId + '&option_id='+ selectedOptionId
-                +'&user_email=' + UserDetailsUtil.getUserGoogleId() + "&question_request_time="+questionRequestTime ;
-            const response = await fetch(url, {
-                method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json',
-                    }
-            });
-            let data = await response.json();
-            return {data};
-        }
-        catch(e) {
-            logError('QuestionsReceiver.submitQuestionResponse', e);
-            return null;
-        }
-    }
+    static getQuestionComment = async (questionId, userId) => requestJson(
+        'QuestionsReceiver.getQuestionComment',
+        currentHost + 'question/comment?question_id=' + encode(questionId) + '&user_id=' + encode(userId)
+    )
 
-    static upsertQuestion = async(questionData) => {
-        try {
-            let response = fetch(currentHost + 'question', {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(questionData)
-                }
-            );
-            let data = await response.json();
-            return {data};
-        } catch (e) {
-            logError('QuestionsReceiver.upsertQuestion', e);
-            return null;
-        }
-    }
+    static buildComments = (comments) => (comments || []).map((comment) => ({
+        id: comment.id,
+        userId: comment.userId,
+        description: comment.description,
+        upvoteCount: comment.upvoteCount,
+        downvoteCount: comment.downvoteCount,
+        // `comment.replies.forEach` threw when a comment had no replies array.
+        replies: (comment.replies || []).map((reply) => ({
+            id: reply.id,
+            userId: reply.userId,
+            description: reply.description,
+            upvoteCount: reply.upvoteCount,
+            downvoteCount: reply.downvoteCount,
+        })),
+    }))
 
-    static getUserSubmmittedQuestionsSummary = async(userEmail) => {
-        try {
-            let response = await fetch(currentHost + 'question/submission/summary/user?user_email=' + userEmail)
-            let data = await response.json();
-            return {data};
+    static updateQuestionComments = async (questionId, comments) => postJson(
+        'QuestionsReceiver.updateQuestionComments',
+        currentHost + 'question/comment?question_id=' + encode(questionId),
+        {
+            questionId,
+            comments: QuestionsReceiver.buildComments(comments),
         }
-        catch (e) {
-            logError('QuestionsReceiver.getUserSubmmittedQuestionsSummary', e);
-            return null;
-        }
-    }
+    )
 
-    static getQuestionComment = async(questionId, userId) => {
-        try {
-            let response = await fetch(currentHost + 'question/comment?question_id=' + questionId + "&user_id=" + userId)
-            let data = await response.json();
-            return {data};
-        } catch(e) {
-            logError('QuestionsReceiver.getQuestionComment', e);
-            return {};
-        }
-    }
+    static upvoteQuestion = async (questionId, userId) => requestJson(
+        'QuestionsReceiver.upvoteQuestion',
+        currentHost + 'question/upvote?question_id=' + encode(questionId) + '&user_id=' + encode(userId)
+    )
 
-    static buildComments = (comments) => {
-        let response = [];
-        comments.forEach(comment => {
-            let commentBody = {};
-            commentBody.id = comment.id;
-            commentBody.userId = comment.userId;
-            commentBody.description = comment.description;
-            commentBody.upvoteCount = comment.upvoteCount;
-            commentBody.downvoteCount = comment.downvoteCount;
-            let commentReplies = [];
-            comment.replies.forEach(reply => {
-                let commentReply = {};
-                commentReply.id = reply.id;
-                commentReply.userId = reply.userId;
-                commentReply.description = reply.description;
-                commentReply.upvoteCount = reply.upvoteCount;
-                commentReply.downvoteCount = reply.downvoteCount;
-                commentReplies.push(commentReply);
-            })
-            commentBody.replies = commentReplies;
-            response.push(commentBody);
-        })
-        return response;
-    }
+    static downvoteQuestion = async (questionId, userId) => requestJson(
+        'QuestionsReceiver.downvoteQuestion',
+        currentHost + 'question/downvote?question_id=' + encode(questionId) + '&user_id=' + encode(userId)
+    )
 
-    static updateQuestionComments = async(questionId, comments) => {
-        try {
-            let requestBody = {};
-            requestBody.comments = this.buildComments(comments);
-            requestBody.questionId = questionId;
-            let response = await fetch(currentHost + 'question/comment?question_id=' + questionId, {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(requestBody)
-                }
-            );
-            return "updated";
-        } catch (e) {
-            logError('QuestionsReceiver.updateQuestionComments', e);
-            return null;
-        }
-    }
+    static getQuestionVoting = async (questionId, userId) => requestJson(
+        'QuestionsReceiver.getQuestionVoting',
+        currentHost + 'question/vote/details?question_id=' + encode(questionId) + '&user_id=' + encode(userId)
+    )
 
-    static upvoteQuestion= async(questionId, userId) => {
-        try {
-            let response = await fetch(currentHost + '/question/upvote?question_id=' + questionId + '&user_id=' + userId)
-            let data = await response.json();
-            return {data};
-        } catch(e) {
-            logError('QuestionsReceiver.upvoteQuestion', e);
-            return {};
-        }
-    }
+    static upvoteQuestionComment = async (questionId, commentId, replyId, userId) => requestJson(
+        'QuestionsReceiver.upvoteQuestionComment',
+        currentHost + 'question/comment/upvote?question_id=' + encode(questionId)
+            + '&user_id=' + encode(userId)
+            + '&comment_id=' + encode(commentId)
+            + '&reply_id=' + encode(replyId)
+    )
 
-    static downvoteQuestion = async(questionId, userId) => {
-        try {
-            let response = await fetch(currentHost + '/question/downvote?question_id=' + questionId + '&user_id=' + userId)
-            let data = await response.json();
-            return {data};
-        } catch(e) {
-            logError('QuestionsReceiver.downvoteQuestion', e);
-            return {};
-        }
-    }
+    static downvoteQuestionComment = async (questionId, commentId, replyId, userId) => requestJson(
+        'QuestionsReceiver.downvoteQuestionComment',
+        currentHost + 'question/comment/downvote?question_id=' + encode(questionId)
+            + '&user_id=' + encode(userId)
+            + '&comment_id=' + encode(commentId)
+            + '&reply_id=' + encode(replyId)
+    )
 
-    static getQuestionVoting = async(questionId, userId) => {
-        try {
-            let response = await fetch(currentHost + '/question/vote/details?question_id=' + questionId + '&user_id=' + userId)
-            let data = await response.json();
-            return {data};
-        } catch(e) {
-            logError('QuestionsReceiver.getQuestionVoting', e);
-            return {};
-        }
-    }
-
-    static upvoteQuestionComment= async(questionId, commentId, replyId, userId) => {
-        try {
-            let response = await fetch(
-                currentHost + '/question/comment/upvote?question_id=' + questionId + '&user_id=' + userId + '&comment_id=' + commentId + '&reply_id=' + replyId)
-            let data = await response.json();
-            return {data};
-        } catch(e) {
-            logError('QuestionsReceiver.upvoteQuestionComment', e);
-            return {};
-        }
-    }
-
-    static downvoteQuestionComment = async(questionId, commentId, replyId, userId) => {
-        try {
-            let response = await fetch(
-                currentHost + '/question/comment/downvote?question_id=' + questionId + '&user_id=' + userId + '&comment_id=' + commentId + '&reply_id=' + replyId)
-            let data = await response.json();
-            return {data};
-        } catch(e) {
-            logError('QuestionsReceiver.downvoteQuestionComment', e);
-            return {};
-        }
-    }
-
-    static getNextRecommendedQuestion = async(questionId, emailId) => {
-        try {
-            let response = await fetch(
-                currentHost + '/question/recommendation?question_id=' + questionId + '&user_id=' + emailId)
-            let data = await response.json();
-            return {data};
-        } catch(e) {
-            logError('QuestionsReceiver.getNextRecommendedQuestion', e);
-            return {};
-        }   
-    }
+    static getNextRecommendedQuestion = async (questionId, userId) => requestJson(
+        'QuestionsReceiver.getNextRecommendedQuestion',
+        currentHost + 'question/recommendation?question_id=' + encode(questionId) + '&user_id=' + encode(userId)
+    )
 
 }
 

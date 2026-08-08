@@ -11,6 +11,11 @@ import { VscSettings } from "react-icons/vsc";
 import { Popover } from 'react-tiny-popover';
 import './leftSideBar.css';
 import { AiOutlineSearch } from "react-icons/ai";
+import { dataOf, listOf } from '../../../apis/unwrap';
+
+// Fallback shape for the paged list endpoint, used when a request fails so
+// render paths that read `.questions` / `.pageCount` keep working.
+const EMPTY_PAGE = { questions: [], pageCount: 0, pageSize: 10 };
 
 const mapDispatchToProps = dispatch => ({
     saveQuestionSet: (payload) => dispatch(saveQuestionSet(payload)),
@@ -33,82 +38,76 @@ class TagsFilterViewLarge extends React.Component {
         super(props)
         this.state = {};
     }
-    addNewTag = (tag,index) => {
+
+    /**
+     * Applied filters, as a single source of truth.
+     *
+     * The host page owns this list (it is the same list it shows as chips and sends
+     * with every query). This component used to keep its own copy in
+     * `generalInfo.selectedTags` and run its own list query, so the page's chips and
+     * the toolbar's chips came from two pieces of state that never synced, and each
+     * one's query dropped the other's criteria. The fallback keeps the component
+     * usable if it is ever mounted without the host prop.
+     */
+    getAppliedTags = () => {
+        if (Array.isArray(this.props.appliedTags)) {
+            return this.props.appliedTags;
+        }
+        const fromGeneralInfo = this.props.generalInfo && this.props.generalInfo.selectedTags;
+        return Array.isArray(fromGeneralInfo) ? fromGeneralInfo : [];
+    }
+
+    applyTags = (tags) => {
+        if (typeof this.props.onFiltersChanged === 'function') {
+            this.props.onFiltersChanged(tags);
+            return;
+        }
+        // Standalone fallback: keep the local copy and refresh the list directly.
         let payload = {...this.props.generalInfo};
-        const toggledTag = this.props.generalInfo.suggestedTags.get(tag)[index];
+        payload.selectedTags = tags;
+        this.props.updateGeneralInfo(payload);
+        QuestionsReceiver.getAllFilteredQuestions('', tags.map((tag) => tag.id), []).then(questionsData=>{
+            let questionSetPayload = {...this.props.questionSet};
+            questionSetPayload.questions = dataOf(questionsData, EMPTY_PAGE);
+            questionSetPayload.tags = tags;
+            this.props.saveQuestionSet(questionSetPayload);
+        });
+    }
+
+    addNewTag = (tag,index) => {
+        const suggested = this.props.generalInfo.suggestedTags.get(tag) || [];
+        const toggledTag = suggested[index];
         if (toggledTag == null) {
             return;
         }
+        const applied = this.getAppliedTags();
         if(this.isASelectedTag(toggledTag.id)){
             // Deselect. The previous implementation walked selectedTags and compared
             // each entry against suggestedTags.get(tag)[i] -- the SAME index in a
             // different, unrelated array -- so it removed whichever tags happened to
             // not line up positionally rather than the one that was clicked.
-            payload.selectedTags = payload.selectedTags.filter((selected) => selected.id !== toggledTag.id);
+            this.applyTags(applied.filter((selected) => selected.id !== toggledTag.id));
+            return;
         }
-        else{ 
-            let selectedTags = [...payload.selectedTags];
-            selectedTags.push(toggledTag);
-            payload.selectedTags=selectedTags;
-        }
-        this.props.updateGeneralInfo(payload);
-        let selectedTagIds=[];
-        for(let index=0;index<payload.selectedTags.length;index++){
-            selectedTagIds.push(payload.selectedTags[index].id);
-        }
-        let channelIds=[];
-        let searchedKey="";
-        QuestionsReceiver.getAllFilteredQuestions(searchedKey, selectedTagIds, channelIds).then(questionsData=>{
-            let payload = {...this.props.questionSet};
-            payload.questions = questionsData.data;
-            payload.searchedKey = searchedKey;
-            this.props.saveQuestionSet(payload);
-        });
+        this.applyTags([...applied, toggledTag]);
     }
-    
+
     isASelectedTag = (tagId) => {
-        let selectedTags=[...this.props.generalInfo.selectedTags];
-        for(let index=0;index<selectedTags.length;index++){
-            if(selectedTags[index].id == tagId){
-                return true;
-            }
-        }
-        return false;
+        return this.getAppliedTags().some((tag) => tag && tag.id === tagId);
     }
 
     removeSelectedAppliedTag = (tagId) => {
-        let updatedTemporaryTags=[];
-        let selectedTags=[...this.props.generalInfo.selectedTags];
-        let payload ={...this.props.generalInfo};
-        for(let x=0; x<selectedTags.length;x++) {
-            if(tagId!=selectedTags[x].id){
-                updatedTemporaryTags.push(selectedTags[x]);   
-            }
-        }
-        payload.selectedTags = updatedTemporaryTags;
-        this.props.updateGeneralInfo(payload);
-        let selectedTagIds=[];
-        for(let index=0;index<payload.selectedTags.length;index++){
-            selectedTagIds.push(payload.selectedTags[index].id);
-        }
-        let channelIds=[];
-        let searchedKey="";
-        QuestionsReceiver.getAllFilteredQuestions(searchedKey, selectedTagIds, channelIds).then(questionsData=>{
-            let payload = {...this.props.questionSet};
-            payload.questions = questionsData.data;
-            payload.searchedKey = searchedKey;
-            this.props.saveQuestionSet(payload);
-        });
+        this.applyTags(this.getAppliedTags().filter((tag) => tag.id !== tagId));
     }
 
     showSelectedTags = () => {
-        if (this.props.generalInfo == undefined || this.props.generalInfo.selectedTags == undefined || this.props.generalInfo.selectedTags.length == 0) {
+        const selectedTags = this.getAppliedTags();
+        if (selectedTags.length === 0) {
             return <div></div>;
         }
         let response = [];
-        let selectedTags = [...this.props.generalInfo.selectedTags];
         for(let index=0; index<selectedTags.length; index++) {
-            if(this.isASelectedTag(selectedTags[index].id) ){
+            if(selectedTags[index] && selectedTags[index].id){
                     response.push(
                         // Removable filter chip. Accent tint + a small affordance, rather
                         // than a bordered box with an oversized blue close icon.
@@ -118,11 +117,12 @@ class TagsFilterViewLarge extends React.Component {
                         >
                             <span className='truncate max-w-[16rem]'>{selectedTags[index].tagName}</span>
                             <button
-                                className='p-0.5 rounded-full hover:bg-primary-100 transition-colors'
+                                type="button"
+                                className='p-0.5 rounded-full hover:bg-primary-100 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500'
                                 aria-label={"Remove filter " + selectedTags[index].tagName}
                                 onClick={()=>this.removeSelectedAppliedTag(selectedTags[index].id)}
                             >
-                                <AiOutlineClose size={12} />
+                                <AiOutlineClose size={12} aria-hidden="true" />
                             </button>
                         </span>
                     );
@@ -143,7 +143,9 @@ class TagsFilterViewLarge extends React.Component {
 
     showSuggestedTag = (tag) => {
         let response = [];
-        let suggestedTags=this.props.generalInfo.suggestedTags.get(tag);
+        // `.get()` returns undefined for a dimension whose prefetch has not landed
+        // yet, and reading `.length` off that threw while the popover was open.
+        let suggestedTags = this.props.generalInfo.suggestedTags.get(tag) || [];
         for(let index=0; index<suggestedTags.length; index++) {
                 const isSelected = this.isASelectedTag(suggestedTags[index].id);
                 response.push(
@@ -160,7 +162,10 @@ class TagsFilterViewLarge extends React.Component {
                             className='w-4 h-4 shrink-0 accent-primary-600 pointer-events-none'
                         />
                         <span className='truncate'>
-                            {this.getNormalisedTagName(suggestedTags[index].tagName, this.props.generalInfo.tagPrefixPairMap.get(tag).prefix)}
+                            {this.getNormalisedTagName(
+                                suggestedTags[index].tagName,
+                                (this.props.generalInfo.tagPrefixPairMap.get(tag) || { prefix: '' }).prefix
+                            )}
                         </span>
                     </button>
                 );
@@ -177,11 +182,11 @@ class TagsFilterViewLarge extends React.Component {
         tagPlaceholder.set(tag, event.target.value);
         payload.tagPlaceholder = tagPlaceholder;
         this.props.updateGeneralInfo(payload);
-        let prefixValue =payload.tagPrefixPairMap.get(tag).prefix;
+        let prefixValue = (payload.tagPrefixPairMap.get(tag) || { prefix: '' }).prefix;
         prefixValue=(prefixValue+event.target.value);
         TagReceiver.getSuggestedTags((prefixValue)).then(tagData=>{
             let payload = {...this.props.generalInfo};
-            let suggestedTagsByApi = [...tagData.data];
+            let suggestedTagsByApi = listOf(tagData);
             let suggestedTags =new Map(payload.suggestedTags);
             suggestedTags.set(tag,suggestedTagsByApi);
             payload.suggestedTags=suggestedTags;
@@ -189,14 +194,17 @@ class TagsFilterViewLarge extends React.Component {
         });
     }
 
+    /**
+     * Opens the dropdown for one dimension, closing any other.
+     *
+     * This used to toggle against null rather than against the clicked dimension: if
+     * Subject was open and you clicked Chapter, it set the open dimension to null, so
+     * Chapter did not open. Moving between filters took two clicks on every control
+     * and looked like the first click had been missed.
+     */
     activateTagPopup = (index) => {
         let payload = {...this.props.generalInfo};
-        if(payload.activeTagFilterPopupIndex == null) {
-            payload.activeTagFilterPopupIndex = index;
-        }
-        else {
-            payload.activeTagFilterPopupIndex = null;
-        }
+        payload.activeTagFilterPopupIndex = payload.activeTagFilterPopupIndex === index ? null : index;
         this.props.updateGeneralInfo(payload);
     }
 
@@ -213,12 +221,33 @@ class TagsFilterViewLarge extends React.Component {
         let triggerStateCSS = isTagSearchActive
             ? "border-primary-500 bg-primary-50 text-primary-700"
             : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50";
+        const dimension = this.props.generalInfo.tagPrefixPairMap.get(tag) || {};
+        // How many filters from this dimension are applied, so a collapsed control
+        // still says whether it is doing anything. Previously an active filter was
+        // only visible in the chip row further down, which meant a toolbar of seven
+        // identical-looking dropdowns gave no clue which ones were narrowing the list.
+        const appliedInDimension = dimension.prefix
+            ? this.getAppliedTags().filter(
+                (applied) => applied && typeof applied.tagName === 'string'
+                    && applied.tagName.startsWith(dimension.prefix)
+            ).length
+            : 0;
         let triggerContent = <button
-            className={'inline-flex items-center gap-1 h-9 px-3 rounded-lg border text-sm font-medium transition-colors ' + triggerStateCSS}
+            type="button"
+            className={'inline-flex items-center gap-1 h-9 px-3 rounded-lg border text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 '
+                + (appliedInDimension > 0 && !isTagSearchActive
+                    ? 'border-primary-500 bg-primary-50 text-primary-700'
+                    : triggerStateCSS)}
             onClick={(event)=>this.activateTagPopup(tag)}
+            aria-expanded={isTagSearchActive}
         >
-            {this.props.generalInfo.tagPrefixPairMap.get(tag).inputPlaceholder}
-            <MdArrowDropDown size={18} />
+            {dimension.inputPlaceholder}
+            {appliedInDimension > 0 &&
+                <span className='ml-0.5 px-1.5 rounded-full bg-primary-600 text-white text-[10px] font-bold tabular-nums'>
+                    {appliedInDimension}
+                </span>
+            }
+            <MdArrowDropDown size={18} aria-hidden="true" />
         </button>;
 
         let content = <div
@@ -233,21 +262,26 @@ class TagsFilterViewLarge extends React.Component {
                     <input
                         type="text"
                         className='w-full h-10 pl-9 pr-3 text-sm text-gray-800 placeholder-gray-400 focus:outline-none'
-                        placeholder={this.props.generalInfo.tagPrefixPairMap.get(tag).searchPlaceholder}
-                        value = {this.props.generalInfo.tagPlaceholder.get(tag)}
+                        placeholder={dimension.searchPlaceholder}
+                        // `.get()` yields undefined before the placeholder map is
+                        // seeded, which React reports as an uncontrolled-to-controlled
+                        // input switch.
+                        value = {this.props.generalInfo.tagPlaceholder.get(tag) || ''}
                         onChange = {(event) => this.updateTagDetails(event,tag)}
+                        aria-label={dimension.searchPlaceholder}
                     />
                 </div>
                 {this.showSuggestedTag(tag)}
             </div>;
         return <Popover
                 isOpen={isTagSearchActive}
-                positions={['bottom', 'left', 'right', 'up']} // preferred positions by priority
+                positions={['bottom', 'left', 'right', 'top']} // preferred positions by priority
                 align = {"start"}
-                content={({ position, childRect, popoverRect }) => (
-                    content
-                )}
-                // onClickOutside = {() => this.toggleLoginPopOver()}  
+                content={content}
+                // The only way to dismiss an open dropdown used to be onMouseLeave on
+                // the panel, which does not exist on a touch screen — so on a tablet
+                // the panel stayed open over the results.
+                onClickOutside = {this.inactivateTagPopup}
             >
                 {triggerContent}
             </Popover>
@@ -289,7 +323,10 @@ class TagsFilterViewLarge extends React.Component {
 
         let payload ={...this.props.generalInfo};
         payload.suggestedTags= suggestedTags;
-        payload.selectedTags=[];
+        // Was unconditionally `[]`, which erased any filter the host page had already
+        // applied (a channel link, "my created questions", or the default source
+        // filter) the moment this toolbar mounted.
+        payload.selectedTags = Array.isArray(payload.selectedTags) ? payload.selectedTags : [];
         payload.tagPrefixPairMap = tagPrefixPairMap;
         payload.tagPlaceholder=tagPlaceholder;
         this.props.updateGeneralInfo(payload);
@@ -299,7 +336,7 @@ class TagsFilterViewLarge extends React.Component {
         TagsFilterViewLarge.FILTER_DIMENSIONS.forEach(([key, prefix]) => {
             TagReceiver.getSuggestedTags(prefix).then(tagData=>{
                 let payload ={...this.props.generalInfo};
-                let suggestedTagsByApi = [...tagData.data];
+                let suggestedTagsByApi = listOf(tagData);
                 let suggestedTags =new Map(payload.suggestedTags);
                 suggestedTags.set(key, suggestedTagsByApi);
                 payload.suggestedTags=suggestedTags;
@@ -314,23 +351,29 @@ class TagsFilterViewLarge extends React.Component {
     //     this.props.updateGeneralInfo(payload);
     // } 
     
-    toggleFilterPopOver = () =>{
-        let generalInfo = typeof this.props.generalInfo === "undefined"?{}:{...this.props.generalInfo};
-        generalInfo.isTagFilterViewActive = generalInfo.isTagFilterViewActive==undefined?true:!generalInfo.isTagFilterViewActive;
-        this.props.updateGeneralInfo(generalInfo);
+    isReady = () => {
+        const info = this.props.generalInfo;
+        return info != undefined
+            && info.tagPrefixPairMap != undefined
+            && info.suggestedTags != undefined
+            && info.tagPlaceholder != undefined;
+    }
+
+    // Seeding used to happen inside render(), which dispatched several redux actions
+    // (one per filter dimension, plus the initial map) as a side effect of
+    // rendering.
+    componentDidMount() {
+        if (!this.isReady()) {
+            this.initializeGeneralInfo();
+        }
     }
 
     render() {
-        if(this.props.generalInfo == undefined || this.props.generalInfo.tagPrefixPairMap == undefined || this.props.generalInfo.selectedTags ==undefined  || this.props.generalInfo.suggestedTags == undefined) {
-            {this.initializeGeneralInfo()};
+        if(!this.isReady()) {
             return <div></div>;
         }
-        // if(this.props.generalInfo.selectedTags.length==0 && this.props.generalInfo.selectedTags.length!=0){
-        //     this.updateExistingTags();
-        //     return <div/>
-        // }
-        {/* Filter toolbar: white card, hairline border, controls on a single 36px
-            row so they read as a set of selects rather than loose text. */}
+        // Filter toolbar: white card, hairline border, controls on a single 36px
+        // row so they read as a set of selects rather than loose text.
         return <div className='bg-white border border-gray-200 rounded-xl px-4 py-3'>
             <div className="flex flex-row flex-wrap items-center gap-2">
                 <div className='flex items-center gap-2 pr-1 text-gray-500'>

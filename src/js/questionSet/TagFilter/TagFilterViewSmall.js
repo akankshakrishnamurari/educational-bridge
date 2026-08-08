@@ -1,18 +1,34 @@
 import React from 'react';
 import { connect } from 'react-redux';
-import {saveQuestionSet, savePaperSet, updateGeneralInfo} from '../../../store/actions/solgressAction';
-import { generalTextSize, searchBoxInputCSS } from '../../../constants/TextSizeConstants';
+import {saveQuestionSet, updateGeneralInfo} from '../../../store/actions/solgressAction';
 import TagReceiver from '../../../apis/TagReceiver';
 import QuestionsReceiver from '../../../apis/QuestionsReceiver';
-import Collapsible from "react-collapsible";
-import {AiOutlineDownSquare} from "react-icons/ai";
-import { object } from 'prop-types';
-import { JSXUtils } from '../../../utils/JSXUtils';
+import {AiOutlineClose, AiOutlineSearch} from "react-icons/ai";
+import {MdExpandMore, MdExpandLess} from "react-icons/md";
+import { dataOf, listOf } from '../../../apis/unwrap';
 
+// Fallback shape for the paged list endpoint, used when a request fails so
+// render paths that read `.questions` / `.pageCount` keep working.
+const EMPTY_PAGE = { questions: [], pageCount: 0, pageSize: 10 };
+
+// Same dimensions, in the same order, as the desktop toolbar. The two views
+// previously offered different sets of filters against different tag prefixes:
+// this one asked for "Exam Name : ", a prefix no tag in the database has ever
+// used (the importer writes "Exam : "), so that filter returned an empty list
+// forever. It also had no Chapter, Difficulty or Year, which are exactly the
+// dimensions a student narrows by.
+const FILTER_DIMENSIONS = [
+    { key: 'subject', prefix: 'Subject : ', label: 'Subject' },
+    { key: 'chapter', prefix: 'Chapter : ', label: 'Chapter' },
+    { key: 'topic', prefix: 'Topic : ', label: 'Topic' },
+    { key: 'difficulty', prefix: 'Difficulty : ', label: 'Difficulty' },
+    { key: 'year', prefix: 'Year : ', label: 'Year' },
+    { key: 'exam', prefix: 'Exam : ', label: 'Exam' },
+    { key: 'author', prefix: 'Created By : ', label: 'Author' },
+];
 
 const mapDispatchToProps = dispatch => ({
     saveQuestionSet: (payload) => dispatch(saveQuestionSet(payload)),
-    savePaperSet: (payload) => dispatch(savePaperSet(payload)),
     updateGeneralInfo: (payload) => dispatch(updateGeneralInfo(payload))
 })
 
@@ -20,288 +36,278 @@ const mapDispatchToProps = dispatch => ({
 const mapStateToProps = state => {
     return {
         questionSet: state.solgressReducer.questionSet,
-        paperSet: state.solgressReducer.paperSet,
         generalInfo: state.solgressReducer.generalInfo
     };
 }
 
+/**
+ * The filters sheet on small screens.
+ *
+ * This was rewritten rather than patched. The previous version:
+ *
+ *   - Rendered two literal `<div>.</div>` elements as bottom spacing, so two stray
+ *     full stops sat visibly at the end of the sheet.
+ *   - Dispatched redux actions from inside render() (initializeGeneralInfo and
+ *     updateExistingTags), so rendering mutated state.
+ *   - Built its option rows in a for-loop with no `key`, and rendered
+ *     `<input type="checkbox" checked>` with no onChange, producing a React warning
+ *     per option and a checkbox the browser treats as read-only for no stated reason.
+ *   - Put every interaction on a `<div onClick>`, so nothing in the sheet was
+ *     reachable by keyboard.
+ *   - Applied filters via `getAllFilteredQuestions("", tagIds, [])`, discarding the
+ *     active search text and channel, and wrote its result to a second copy of the
+ *     filter state (`generalInfo.temporarySelectedTags`) that the list page never
+ *     read — so the chips shown after applying did not necessarily describe the
+ *     results.
+ *
+ * It now shares `questionSet.tags` with the desktop toolbar, which is the list the
+ * page actually queries with.
+ */
 class TagsFilterViewSmall extends React.Component {
 
     constructor(props) {
         super(props)
-        this.state = {};
+        this.state = {
+            // Staged locally: a filter sheet should not re-query on every tap. Only
+            // "Show results" commits.
+            draftTags: null,
+            openDimension: 'subject',
+            suggestionsByDimension: {},
+            searchByDimension: {},
+        };
     }
-    appliedFilterQuestions = () =>{
-        let selectedTags=[];
-        let temporarySelectedTags=this.props.generalInfo.temporarySelectedTags;
-        let selectedTagIds=[];
-        for(let index=0;index<temporarySelectedTags.length;index++){
-            selectedTags.push(temporarySelectedTags[index]);
-            let length=selectedTagIds.push(temporarySelectedTags[index].id);
+
+    componentDidMount() {
+        this.setState({ draftTags: this.getAppliedTags() });
+        FILTER_DIMENSIONS.forEach((dimension) => this.loadSuggestions(dimension, ''));
+    }
+
+    getAppliedTags = () => {
+        const tags = this.props.questionSet && this.props.questionSet.tags;
+        return Array.isArray(tags) ? [...tags] : [];
+    }
+
+    getDraftTags = () => this.state.draftTags || [];
+
+    loadSuggestions = (dimension, query) => {
+        TagReceiver.getSuggestedTags(dimension.prefix + query).then(tagData=>{
+            this.setState((previous) => ({
+                suggestionsByDimension: {
+                    ...previous.suggestionsByDimension,
+                    [dimension.key]: listOf(tagData),
+                },
+            }));
+        });
+    }
+
+    onSearchChange = (dimension, value) => {
+        this.setState((previous) => ({
+            searchByDimension: { ...previous.searchByDimension, [dimension.key]: value },
+        }));
+        this.loadSuggestions(dimension, value);
+    }
+
+    isSelected = (tagId) => this.getDraftTags().some((tag) => tag && tag.id === tagId);
+
+    toggleTag = (tag) => {
+        if (tag == null || tag.id == null) {
+            return;
         }
-        let channelIds=[];
-        let searchedKey="";
-        QuestionsReceiver.getAllFilteredQuestions(searchedKey, selectedTagIds, channelIds).then(questionsData=>{
-            let payload = {...this.props.questionSet};
-            payload.questions = questionsData.data;
-            payload.searchedKey = searchedKey;
+        const draft = this.getDraftTags();
+        this.setState({
+            draftTags: this.isSelected(tag.id)
+                ? draft.filter((existing) => existing.id !== tag.id)
+                : [...draft, tag],
+        });
+    }
+
+    clearAll = () => {
+        this.setState({ draftTags: [] });
+    }
+
+    getChannelIdsFromUrl = () => {
+        if (typeof window === 'undefined') {
+            return [];
+        }
+        const channelId = new URLSearchParams(window.location.search).get('channel_id');
+        return channelId == null || channelId === '' ? [] : [channelId];
+    }
+
+    /**
+     * Commits the staged filters and refreshes the list, carrying the search text
+     * and channel through so applying a filter narrows the current result set
+     * instead of silently resetting it to everything.
+     */
+    applyFilters = () => {
+        const tags = this.getDraftTags();
+        const set = this.props.questionSet || {};
+        const searchText = set.searchedKey || '';
+        const pageSize = set.currentPageSize || 10;
+        QuestionsReceiver.getAllFilteredQuestions(
+            searchText,
+            tags.map((tag) => tag.id),
+            this.getChannelIdsFromUrl(),
+            0,
+            pageSize
+        ).then(questionsData=>{
+            let payload = {...set};
+            payload.questions = dataOf(questionsData, EMPTY_PAGE);
+            payload.tags = tags;
+            payload.searchedKey = searchText;
+            payload.currentPage = 1;
+            payload.currentPageSize = pageSize;
             this.props.saveQuestionSet(payload);
         });
-        let payload ={...this.props.generalInfo};
-        payload.temporarySelectedTags=[];
-        payload.selectedTags= selectedTags;
-        payload.isTagFilterViewActive=false;
-        this.props.updateGeneralInfo(payload);
-    }
-    
-    addNewTag = (index) => {
-        let payload = {...this.props.generalInfo};
-        if(this.isASelectedTag(payload.suggestedTags[index].id)){
-            let array=[];
-            if(payload.temporarySelectedTags.length ==0){
-                array=[];
-            }
-            else{
-                array= payload.temporarySelectedTags;
-            }
-            if(array.length == 1){
-                array=[];
-            }
-            else{
-                
-                var new_array=[];
-                for(let index1=0;index1<array.length;index1++){
-                    if(array[index1].id != payload.suggestedTags[index].id){
-                        let x=new_array.push(array[index1]);
-                    }
-                }
-                array=new_array;
-            }
-            payload.temporarySelectedTags= array;
-
-        }
-        else{ 
-            if(this.props.generalInfo.temporarySelectedTags === undefined){
-                let temporarySelectedTags =[];
-                let length=temporarySelectedTags.push(payload.suggestedTags[index]);
-                payload.temporarySelectedTags=temporarySelectedTags;
-            }
-            else{
-                let temporarySelectedTags = [...payload.temporarySelectedTags];
-                let length=temporarySelectedTags.push(payload.suggestedTags[index]);
-                payload.temporarySelectedTags=temporarySelectedTags;
-            }
-            payload.authorTag=payload.suggestedTags[index].tagName;
-            let prefix="Created By : ";
-            let authorname=payload.authorTag;
-            authorname= authorname.slice(prefix.length);
-            payload.authorTag=authorname;
-        }
-        this.props.updateGeneralInfo(payload);
-    }
-    
-    isASelectedTag = (tagId) => {
-        let temporarySelectedTags=[...this.props.generalInfo.temporarySelectedTags];
-        for(let index=0;index<temporarySelectedTags.length;index++){
-            if(temporarySelectedTags[index].id == tagId){
-                return true;
-            }
-        }
-        return false;
+        // Keep the legacy copy in step for any remaining reader, and close the sheet.
+        let generalInfo = {...(this.props.generalInfo || {})};
+        generalInfo.selectedTags = tags;
+        generalInfo.temporarySelectedTags = [];
+        generalInfo.isTagFilterViewActive = false;
+        this.props.updateGeneralInfo(generalInfo);
     }
 
-    removeSelectedAppliedTag = (tagId) => {
-        let updatedTemporaryTags=[];
-        let temporarySelectedTags=this.props.generalInfo.temporarySelectedTags;
-        let payload ={...this.props.generalInfo};
-        for(let x=0; x<temporarySelectedTags.length;x++) {
-            if(tagId!=temporarySelectedTags[x].id){
-                updatedTemporaryTags.push(temporarySelectedTags[x]);   
-            }
+    stripPrefix = (tagName, prefix) => {
+        if (typeof tagName !== 'string') {
+            return '';
         }
-        payload.temporarySelectedTags = updatedTemporaryTags;
-        let updatedSelectedTags=[];
-        let selectedTags=this.props.generalInfo.selectedTags;
-        for(let x=0; x<selectedTags.length;x++) {
-            if(tagId!=selectedTags[x].id){
-                updatedSelectedTags.push(selectedTags[x]);   
-            }
-        }
-        payload.selectedTags = updatedSelectedTags;
-        this.props.updateGeneralInfo(payload);
+        return tagName.startsWith(prefix) ? tagName.slice(prefix.length) : tagName;
     }
 
-    showSelectedTags = () => {
-        if (this.props.generalInfo == undefined || this.props.generalInfo.temporarySelectedTags == undefined || this.props.generalInfo.temporarySelectedTags.length == 0) {
-            return <div></div>;
+    getAppliedChipsJSX = () => {
+        const draft = this.getDraftTags();
+        if (draft.length === 0) {
+            return null;
         }
-        let response = [];
-        response.push(<div>
-            <div className={"px-6  py-2 " + generalTextSize + " leading-tight text-gray-800 "}>
-                Applied Tags :
-            </div>
-        </div>
-        );
-        let payload= this.props.generalInfo;
-        let temporarySelectedTags = [...this.props.generalInfo.temporarySelectedTags];
-        for(let index=0; index<temporarySelectedTags.length; index++) {
-            if(this.isASelectedTag(temporarySelectedTags[index].id) ){
-                    response.push(
-                        // <div className={generalTextSize + " py-1 border border-slate-200 hover:bg-gray-50 w-full" } onClick={()=> this.removeSelectedAppliedTag(index)} >
-                        //     <b>+ </b>
-                        //     {temporarySelectedTags[index].tagName}
-                        // </div>
-                        <div className="flex flex-row">
-                            <div className="py-2 ">{JSXUtils.getTagViewJSX(temporarySelectedTags[index].tagName)}</div>
-                            <div className="px-1 pr-3" onClick={()=>this.removeSelectedAppliedTag(temporarySelectedTags[index].id)}>
-                                <div className={"flex my-2 transition-colors rounded bg-gray-100 border border-gray-300 py-2 text-gray-600 " + generalTextSize + " hover:bg-danger-50 hover:text-danger-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-danger-500"}>
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="8"
-                                            fill="currentColor" className="bi bi-x-lg" viewBox="0 0 16 16">
-                                            <path fill-rule="evenodd"
-                                                d="M13.854 2.146a.5.5 0 0 1 0 .708l-11 11a.5.5 0 0 1-.708-.708l11-11a.5.5 0 0 1 .708 0Z"/>
-                                            <path fill-rule="evenodd"
-                                                d="M2.146 2.146a.5.5 0 0 0 0 .708l11 11a.5.5 0 0 0 .708-.708l-11-11a.5.5 0 0 0-.708 0Z"/>
-                                        </svg>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                        
-            }
-        }
-        return response;
-    }
-
-    showSuggestedTag = (fixedIndex) => {
-        let response = [];
-        let suggestedTags=this.props.generalInfo.suggestedTags;
-        for(let index=0; index<suggestedTags.length; index++) {
-            if(suggestedTags[index].tagName.startsWith(this.props.generalInfo.tagPrefixPairMap[fixedIndex]["prefix"])){
-                response.push(
-                    <div className={generalTextSize + " py-1 border-l border-t border-r hover:bg-gray-50 w-full "}  onClick={()=>this.addNewTag(index)} >
-                        <div className='flex flex-row w-full'>
-                            <div className='px-2 py-1'>{suggestedTags[index].tagName}</div>
-                            <div className='flex grow justify-end w-full pr-2 py-1'>
-                                {
-                                    this.isASelectedTag(suggestedTags[index].id)
-                                        ?<input type='checkbox' checked className='w-4 h-4'></input>
-                                        :<input type='checkbox' className='w-4 h-4'></input>
-                                }
-                            </div>
-                        </div>
-                    </div>
-                    
-                );
-            }
-        }
-        return <div className='flex overflow-auto flex-col w-full '>{response}</div>
-    }
-
-    updateTagDetails = (event,fixedIndex) => {
-        let payload = {...this.props.generalInfo};
-        let tagPlaceholder=payload.tagPrefixPairMap[fixedIndex]["tag"];
-        payload.tagPlaceholder = event.target.value;
-        let random1= "prefix";
-        let prefixValue =payload.tagPrefixPairMap[fixedIndex].prefix;
-        this.props.updateGeneralInfo(payload);
-        prefixValue=(prefixValue+event.target.value);
-        TagReceiver.getSuggestedTags((prefixValue)).then(tagData=>{
-            let payload = {...this.props.generalInfo};
-            let suggestedTags = [...tagData.data];
-            payload.suggestedTags = suggestedTags;
-            this.props.updateGeneralInfo(payload);
-        });
-    }
-    
-    getTagDetailsJSX = (fixedIndex) => {
-        let triggerContent =  <div className={'flex flex-row w-full border px-3 py-2'}>
-            <div className={ generalTextSize + " w-full "}>
-                {this.props.generalInfo.tagPrefixPairMap[fixedIndex].inputPlaceholder}
-            </div>
-            <div className='flex justify-end'>
-                <AiOutlineDownSquare size={25}/>
-            </div>
-        </div>
-
-        let content = <div className='flex w-full'>
-                <div className='flex flex-col w-full px-20'>
-                    <div>
-                        <input
-                            type="text"  
-                            className = { searchBoxInputCSS + "w-full focus:outline-none rounded py-2 px-2 border"}
-                            placeholder="Search filters"
-                            // value = {this.props.newChannelDetails.channelName}  
-                            onChange = {(event) => this.updateTagDetails(event,fixedIndex)}  
-                        />
-                    </div>
-                    {this.showSuggestedTag(fixedIndex)}
-                </div>
-            </div>;
-        return <Collapsible 
-            trigger={triggerContent}
-            className = "border-b-2 Collapsible__trigger">
-            {content}
-        </Collapsible>
-    }
-
-    initializeGeneralInfo = () => {
-        let tagPrefixPairMap=[];
-        tagPrefixPairMap = [
-            { prefix: "Created By : ", tag: "authorTag" , inputPlaceholder: "Author Name" ,searchPlaceholder:"Search Authors"},
-            { prefix: "Subject : ",    tag: "SubjectTag", inputPlaceholder: "Subject Name" ,searchPlaceholder:"Search Subjects"},
-            { prefix: "Topic : ",    tag: "TopicTag", inputPlaceholder: "Topic Name" ,searchPlaceholder:"Search Topics"},
-            { prefix: "Exam Name : ",    tag: "ExamTag", inputPlaceholder: "Exam Name" ,searchPlaceholder:"Search exams"},
-            { prefix: "",    tag: "otherTag", inputPlaceholder: "other tags" ,searchPlaceholder:"Search other tags"}
-
-        ];
-        if(this.props.generalInfo ==  undefined){
-            let payload={...this.props.generalInfo};
-            payload.temporarySelectedTags=[];
-            payload.suggestedTags=[];
-            payload.tagPrefixPairMap = tagPrefixPairMap;
-            this.props.updateGeneralInfo(payload);
-        }
-        else{
-            let payload ={...this.props.generalInfo};
-            if(this.props.generalInfo.tagPrefixPairMap == undefined) payload.tagPrefixPairMap = tagPrefixPairMap;
-            if(this.props.generalInfo.temporarySelectedTags ==undefined)  payload.temporarySelectedTags=[];
-            if(this.props.generalInfo.suggestedTags ==undefined) payload.suggestedTags=[];
-            this.props.updateGeneralInfo(payload);
-        }
-    }
-
-    updateExistingTags = () => {
-        let payload = {...this.props.generalInfo};
-        payload.temporarySelectedTags = [...payload.selectedTags];
-        this.props.updateGeneralInfo(payload);
-    } 
-
-    render() {
-        if(this.props.generalInfo == undefined || this.props.generalInfo.tagPrefixPairMap == undefined || this.props.generalInfo.temporarySelectedTags ==undefined ) {
-            {this.initializeGeneralInfo()};
-            return <div></div>;
-        }
-        if(this.props.generalInfo.temporarySelectedTags.length==0 && this.props.generalInfo.selectedTags.length!=0){
-            this.updateExistingTags();
-            return <div/>
-        }
-        return <div className='flex flex-col h-screen overflow-y-auto '>
-            {this.getTagDetailsJSX(0)}
-            {this.getTagDetailsJSX(1)}
-            {this.getTagDetailsJSX(2)}
-            {this.getTagDetailsJSX(3)}
-            {this.getTagDetailsJSX(4)}
-            {/* {this.getTopicNameJSX(3)}
-            {this.getExamNameJSX(4)}
-            {this.getOtherNamesJSX(5)} */}
-            {this.showSelectedTags()}
-            <div className='flex justify-center py-2 '>
-                <button className={generalTextSize + " flex items-center cursor-pointer bg-primary-600 text-white px-3 py-2 rounded-lg hover:bg-primary-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"} onClick={this.appliedFilterQuestions}>
-                    Show Result
+        return <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+            <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Applied ({draft.length})
+                </span>
+                <button
+                    type="button"
+                    className="text-xs font-semibold text-primary-600 focus:outline-none focus:underline"
+                    onClick={this.clearAll}
+                >
+                    Clear all
                 </button>
             </div>
-            <div>.</div>
-            <div>.</div>
+            <div className="flex flex-wrap gap-1.5">
+                {draft.map((tag) => (
+                    <span
+                        key={tag.id}
+                        className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full bg-primary-50 text-primary-700 text-xs font-medium"
+                    >
+                        <span className="truncate max-w-[12rem]">{tag.tagName}</span>
+                        <button
+                            type="button"
+                            className="p-0.5 rounded-full hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            aria-label={'Remove filter ' + tag.tagName}
+                            onClick={() => this.toggleTag(tag)}
+                        >
+                            <AiOutlineClose size={11} aria-hidden="true"/>
+                        </button>
+                    </span>
+                ))}
+            </div>
+        </div>;
+    }
+
+    getDimensionJSX = (dimension) => {
+        const isOpen = this.state.openDimension === dimension.key;
+        const suggestions = this.state.suggestionsByDimension[dimension.key] || [];
+        const selectedCount = this.getDraftTags().filter(
+            (tag) => tag && typeof tag.tagName === 'string' && tag.tagName.startsWith(dimension.prefix)
+        ).length;
+        return <div key={dimension.key} className="border-b border-gray-100">
+            {/* A real button with aria-expanded, replacing the Collapsible whose
+                trigger was an unfocusable div. */}
+            <button
+                type="button"
+                className="flex items-center justify-between w-full px-4 py-3.5 text-left focus:outline-none focus:bg-gray-50"
+                onClick={() => this.setState({ openDimension: isOpen ? null : dimension.key })}
+                aria-expanded={isOpen}
+            >
+                <span className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{dimension.label}</span>
+                    {selectedCount > 0 &&
+                        <span className="px-1.5 rounded-full bg-primary-600 text-white text-[10px] font-bold tabular-nums">
+                            {selectedCount}
+                        </span>
+                    }
+                </span>
+                {isOpen
+                    ? <MdExpandLess size={20} className="text-gray-400" aria-hidden="true"/>
+                    : <MdExpandMore size={20} className="text-gray-400" aria-hidden="true"/>
+                }
+            </button>
+            {isOpen &&
+                <div className="px-4 pb-3">
+                    <div className="relative">
+                        <AiOutlineSearch
+                            size={15}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                        />
+                        <input
+                            type="text"
+                            className="w-full h-9 pl-9 pr-3 text-sm text-gray-800 placeholder-gray-400 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:bg-white focus:border-primary-500"
+                            placeholder={'Search ' + dimension.label.toLowerCase()}
+                            value={this.state.searchByDimension[dimension.key] || ''}
+                            onChange={(event) => this.onSearchChange(dimension, event.target.value)}
+                            aria-label={'Search ' + dimension.label.toLowerCase()}
+                        />
+                    </div>
+                    <div className="mt-2 max-h-56 overflow-y-auto -mx-1">
+                        {suggestions.length === 0
+                            ? <p className="px-1 py-4 text-center text-sm text-gray-400">No matches</p>
+                            : suggestions.map((tag) => {
+                                const isSelected = this.isSelected(tag.id);
+                                return <button
+                                    key={tag.id}
+                                    type="button"
+                                    className={'flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-left text-sm transition-colors '
+                                        + (isSelected ? 'bg-primary-50 text-primary-700' : 'text-gray-700')}
+                                    onClick={() => this.toggleTag(tag)}
+                                    aria-pressed={isSelected}
+                                >
+                                    {/* A styled span, not a checkbox input: the row is
+                                        the control, and a nested input only produced
+                                        React's "checked without onChange" warning. */}
+                                    <span
+                                        className={'shrink-0 w-4 h-4 rounded border flex items-center justify-center text-[10px] font-bold '
+                                            + (isSelected
+                                                ? 'bg-primary-600 border-primary-600 text-white'
+                                                : 'bg-white border-gray-300 text-transparent')}
+                                        aria-hidden="true"
+                                    >
+                                        &#10003;
+                                    </span>
+                                    <span className="truncate">{this.stripPrefix(tag.tagName, dimension.prefix)}</span>
+                                </button>;
+                            })
+                        }
+                    </div>
+                </div>
+            }
+        </div>;
+    }
+
+    render() {
+        return <div className="flex flex-col w-full max-h-[75vh]">
+            {this.getAppliedChipsJSX()}
+            <div className="flex-1 overflow-y-auto">
+                {FILTER_DIMENSIONS.map((dimension) => this.getDimensionJSX(dimension))}
+            </div>
+            {/* Sticky footer so the commit action is always reachable without
+                scrolling past seven expandable sections. */}
+            <div className="sticky bottom-0 px-4 py-3 bg-white border-t border-gray-200">
+                <button
+                    type="button"
+                    className="w-full h-11 rounded-lg bg-primary-600 text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                    onClick={this.applyFilters}
+                >
+                    Show results
+                </button>
+            </div>
         </div>
     }
 }

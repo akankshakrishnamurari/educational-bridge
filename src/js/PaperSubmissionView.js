@@ -11,6 +11,7 @@ import StatTile from '../components/common/StatTile';
 import Footer from '../components/common/Footer';
 import MeterBar from '../components/common/MeterBar';
 import MathContent from '../components/common/MathContent';
+import ErrorState from '../components/common/ErrorState';
 import { typography, layout } from '../constants/designTokens';
 import { buildTagIdLabelMap } from '../utils/questionTaxonomy';
 import { formatDuration } from '../utils/formatDuration';
@@ -56,25 +57,29 @@ class PaperSubmissionView extends React.Component {
 
     constructor(props) {
         super(props)
-        this.state = { hasRequested: false };
+        this.state = { loadFailed: false };
     }
 
     componentDidMount() {
         this.initializeSubmittedPaperDetails();
     }
 
+    /**
+     * Both failure paths used to return silently, leaving the spinner up forever, so
+     * a broken link and a dropped connection were indistinguishable from a slow one.
+     * `loadFailed` lets the page say so and offer a retry.
+     */
     initializeSubmittedPaperDetails = () => {
-        if (this.state.hasRequested) {
-            return;
-        }
-        this.setState({ hasRequested: true });
         const search = window.location.search;
         const paperSubmissionId = new URLSearchParams(search).get('paper_submission_response_id');
-        if (paperSubmissionId == null) {
+        if (paperSubmissionId == null || paperSubmissionId === '') {
+            this.setState({ loadFailed: true });
             return;
         }
+        this.setState({ loadFailed: false });
         PaperAPIsConnector.getSubmittedPaperDetails(paperSubmissionId).then( submittedPaperData => {
             if (submittedPaperData == null || submittedPaperData.data == null) {
+                this.setState({ loadFailed: true });
                 return;
             }
             this.props.saveSubmittedPaperDetails(submittedPaperData.data);
@@ -434,11 +439,26 @@ class PaperSubmissionView extends React.Component {
         // Guard reads only what this page actually needs. It previously also
         // required `generalInfo`, which nothing on this page ever set, so the
         // report could never render at all.
+        if (this.state.loadFailed) {
+            return <div className='bg-gray-50 min-h-screen'>
+                <EducationalBridgeHeader/>
+                <div className={layout.wideReading + ' py-10'}>
+                    <div className='bg-white rounded-xl shadow-sm border border-gray-100'>
+                        <ErrorState
+                            title="We couldn't load this report"
+                            description="The link may be incomplete, or the connection dropped on the way."
+                            onRetry={this.initializeSubmittedPaperDetails}
+                        />
+                    </div>
+                </div>
+                <Footer />
+            </div>;
+        }
         if(this.props.submittedPaperDetails === undefined || this.props.paperDetails === undefined) {
             return <div className='bg-gray-50 min-h-screen'>
                 <EducationalBridgeHeader/>
                 <div className='flex justify-center py-20'>
-                    <ClipLoader color="#2563EB" size="60"/>
+                    <ClipLoader color="#2563EB" size={60}/>
                 </div>
             </div>;
         }

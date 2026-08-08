@@ -226,6 +226,39 @@ export const parseQuestionTaxonomy = (tags) => {
 };
 
 /**
+ * The id of the first tag matching one of `prefixes`, in the order given.
+ *
+ * `parseQuestionTaxonomy` deliberately returns display labels rather than ids,
+ * but finding sibling questions needs the id to pass to the questions endpoint as
+ * `tag_ids`. Prefixes are tried in order so a caller can ask for "the narrowest
+ * classification available" as ['topic', 'chapter', 'subject'].
+ *
+ * @param {Array<{id: string, tagName: string}>} tags raw `tags` off QuestionResponse
+ * @param {string[]} prefixes tag prefixes, lower-case, e.g. ['topic', 'chapter']
+ * @returns {?{id: string, prefix: string, value: string}}
+ */
+export const findTagByPrefix = (tags, prefixes) => {
+    if (!Array.isArray(tags) || !Array.isArray(prefixes)) {
+        return null;
+    }
+    for (let i = 0; i < prefixes.length; i += 1) {
+        const wanted = String(prefixes[i]).toLowerCase();
+        const hit = tags.find((tag) => {
+            if (!tag || !tag.id || typeof tag.tagName !== 'string') {
+                return false;
+            }
+            const split = splitTagName(tag.tagName);
+            return split !== null && split[0].toLowerCase() === wanted;
+        });
+        if (hit) {
+            const split = splitTagName(hit.tagName);
+            return { id: hit.id, prefix: split[0], value: displayLabel(split[1]) };
+        }
+    }
+    return null;
+};
+
+/**
  * Map a flat list of tags to `{ [tagId]: { subject, topic, chapter, label } }`.
  *
  * The paper analytics are keyed by tag id (`tagIdToCandidateScoreAnalysis`), but a

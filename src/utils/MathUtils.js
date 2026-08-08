@@ -1,4 +1,4 @@
-import React from "react";
+// Pure number helpers, no JSX, so React is not imported. It used to be.
 
 export class MathUtils {
 

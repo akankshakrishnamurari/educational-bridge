@@ -100,6 +100,12 @@ const STATE_STYLES = {
     },
 };
 
+const StrikeIcon = ({ className = '' }) => (
+    <svg className={className} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <path d="M3 10h14" strokeLinecap="round" />
+    </svg>
+);
+
 const OptionList = ({
     options = [],
     selectedOptionId = null,
@@ -110,6 +116,10 @@ const OptionList = ({
     distribution = null,
     groupName = 'answer',
     disabled = false,
+    // Ids the learner has ruled out. Purely local to the solving session — this is
+    // a thinking aid, not an answer, so it is never sent to the server.
+    eliminatedIds = null,
+    onToggleEliminate = null,
 }) => {
     if (!Array.isArray(options) || options.length === 0) {
         return (
@@ -139,86 +149,127 @@ const OptionList = ({
                         ? distribution[option.id]
                         : null;
 
+                    const isEliminated = !reviewMode
+                        && Array.isArray(eliminatedIds)
+                        && eliminatedIds.some((id) => sameId(id, option.id));
+                    const canEliminate = !reviewMode && !disabled && onToggleEliminate !== null;
+
                     return (
-                        <label
+                        // The row is a <div> rather than a <label> so the eliminate
+                        // control can sit outside the label. A <button> nested inside a
+                        // <label> also triggers the label's control, which would select
+                        // the very option the learner is trying to rule out.
+                        <div
                             key={option.id}
                             className={[
-                                'group relative flex items-start gap-3 rounded-xl border p-3 md:p-3.5 transition-colors',
-                                reviewMode ? 'cursor-default' : 'cursor-pointer',
-                                style.row,
+                                'group relative flex items-stretch rounded-xl border transition-colors',
+                                isEliminated ? 'border-gray-200 bg-gray-50' : style.row,
                             ].join(' ')}
                         >
-                            <input
-                                type="radio"
-                                name={groupName}
-                                className="sr-only peer"
-                                value={option.id}
-                                checked={isSelected}
-                                disabled={disabled || reviewMode}
-                                onChange={() => { if (onSelect) { onSelect(option.id); } }}
-                            />
-
-                            {/* Letter badge doubles as the radio indicator. */}
-                            <span
+                            <label
                                 className={[
-                                    'shrink-0 w-7 h-7 rounded-lg border flex items-center justify-center',
-                                    'text-xs font-bold transition-colors',
-                                    'peer-focus-visible:ring-2 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-primary-500',
-                                    style.badge,
+                                    'flex items-start gap-3 flex-1 min-w-0 p-3 md:p-3.5',
+                                    reviewMode ? 'cursor-default' : 'cursor-pointer',
                                 ].join(' ')}
-                                aria-hidden="true"
                             >
-                                {optionLetter(index)}
-                            </span>
-
-                            <span className="flex-1 min-w-0">
-                                <MathContent
-                                    html={option.text}
-                                    as="span"
-                                    className={['block text-sm md:text-base', style.text].join(' ')}
+                                <input
+                                    type="radio"
+                                    name={groupName}
+                                    className="sr-only peer"
+                                    value={option.id}
+                                    checked={isSelected}
+                                    disabled={disabled || reviewMode}
+                                    onChange={() => { if (onSelect) { onSelect(option.id); } }}
                                 />
 
-                                {/* Response distribution, review only. Shows the
-                                    learner whether a wrong answer was a common
-                                    trap or an individual slip. */}
-                                {percent !== null &&
-                                    <span className="block mt-2">
-                                        <span className="flex items-center gap-2">
-                                            <span className="flex-1 h-1 rounded-full bg-gray-100 overflow-hidden">
-                                                <span
-                                                    className={[
-                                                        'block h-full rounded-full',
-                                                        isCorrect ? 'bg-success-500' : 'bg-gray-300',
-                                                    ].join(' ')}
-                                                    style={{ width: Math.max(0, Math.min(100, percent)) + '%' }}
-                                                />
+                                {/* Letter badge doubles as the radio indicator. */}
+                                <span
+                                    className={[
+                                        'shrink-0 w-7 h-7 rounded-lg border flex items-center justify-center',
+                                        'text-xs font-bold transition-colors',
+                                        'peer-focus-visible:ring-2 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-primary-500',
+                                        isEliminated ? 'border-gray-300 text-gray-400 bg-white' : style.badge,
+                                    ].join(' ')}
+                                    aria-hidden="true"
+                                >
+                                    {optionLetter(index)}
+                                </span>
+
+                                <span className="flex-1 min-w-0">
+                                    <MathContent
+                                        html={option.text}
+                                        as="span"
+                                        className={[
+                                            'block text-sm md:text-base',
+                                            isEliminated ? 'text-gray-400 line-through' : style.text,
+                                        ].join(' ')}
+                                    />
+
+                                    {/* Response distribution, review only. Shows the
+                                        learner whether a wrong answer was a common
+                                        trap or an individual slip. */}
+                                    {percent !== null &&
+                                        <span className="block mt-2">
+                                            <span className="flex items-center gap-2">
+                                                <span className="flex-1 h-1 rounded-full bg-gray-100 overflow-hidden">
+                                                    <span
+                                                        className={[
+                                                            'block h-full rounded-full',
+                                                            isCorrect ? 'bg-success-500' : 'bg-gray-300',
+                                                        ].join(' ')}
+                                                        style={{ width: Math.max(0, Math.min(100, percent)) + '%' }}
+                                                    />
+                                                </span>
+                                                <span className="text-[11px] text-gray-500 tabular-nums shrink-0">
+                                                    {percent.toFixed(0)}%
+                                                </span>
                                             </span>
-                                            <span className="text-[11px] text-gray-500 tabular-nums shrink-0">
-                                                {percent.toFixed(0)}%
-                                            </span>
+                                        </span>
+                                    }
+                                </span>
+
+                                {/* Result glyph. Also carries the only non-colour cue
+                                    that distinguishes correct from incorrect, so the
+                                    feedback survives for colour-blind users. */}
+                                {reviewMode && (isCorrect || isSelected) &&
+                                    <span className="shrink-0 flex items-center gap-1.5 pt-0.5">
+                                        {isCorrect
+                                            ? <CheckIcon className="w-5 h-5 text-success-600" />
+                                            : <CrossIcon className="w-5 h-5 text-danger-600" />
+                                        }
+                                        <span className={[
+                                            'text-xs font-semibold hidden sm:inline',
+                                            isCorrect ? 'text-success-700' : 'text-danger-700',
+                                        ].join(' ')}>
+                                            {isCorrect ? (isSelected ? 'Correct' : 'Answer') : 'Your answer'}
                                         </span>
                                     </span>
                                 }
-                            </span>
+                            </label>
 
-                            {/* Result glyph. Also carries the only non-colour cue
-                                that distinguishes correct from incorrect, so the
-                                feedback survives for colour-blind users. */}
-                            {reviewMode && (isCorrect || isSelected) &&
-                                <span className="shrink-0 flex items-center gap-1.5 pt-0.5">
-                                    {isCorrect
-                                        ? <CheckIcon className="w-5 h-5 text-success-600" />
-                                        : <CrossIcon className="w-5 h-5 text-danger-600" />
-                                    }
-                                    <span className={[
-                                        'text-xs font-semibold hidden sm:inline',
-                                        isCorrect ? 'text-success-700' : 'text-danger-700',
-                                    ].join(' ')}>
-                                        {isCorrect ? (isSelected ? 'Correct' : 'Answer') : 'Your answer'}
+                            {canEliminate &&
+                                <button
+                                    type="button"
+                                    onClick={() => onToggleEliminate(option.id)}
+                                    aria-pressed={isEliminated}
+                                    title={isEliminated ? 'Bring this option back' : 'Rule this option out'}
+                                    className={[
+                                        'shrink-0 px-3 flex items-center border-l rounded-r-xl transition-colors',
+                                        'focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500',
+                                        isEliminated
+                                            ? 'border-gray-200 text-gray-500 hover:text-gray-700 bg-gray-100'
+                                            : 'border-gray-100 text-gray-300 hover:text-danger-600 hover:bg-danger-50',
+                                    ].join(' ')}
+                                >
+                                    <StrikeIcon className="w-4 h-4" />
+                                    <span className="sr-only">
+                                        {isEliminated
+                                            ? 'Bring option ' + optionLetter(index) + ' back'
+                                            : 'Rule out option ' + optionLetter(index)}
                                     </span>
-                                </span>
+                                </button>
                             }
-                        </label>
+                        </div>
                     );
                 })}
             </div>

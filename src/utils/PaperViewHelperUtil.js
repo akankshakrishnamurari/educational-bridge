@@ -1,5 +1,5 @@
-import React from "react";
-import PaperAPIsConnector from "../apis/PaperAPIsConnector";
+// Pure data reshaping only — no React and no API calls, so neither is imported.
+// Both used to be imported here and neither was ever referenced.
 
 export class PaperViewHelperUtil {
 

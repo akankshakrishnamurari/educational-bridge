@@ -1,53 +1,32 @@
-import React from 'react';
-import {currentHost} from './../constants/hostConfig';
-import { logError } from '../utils/logger';
+import { currentHost } from './../constants/hostConfig';
+import { requestJson, postJson } from './httpClient';
 
-class TagReceiver extends React.Component  {
+// Tag API. Resolves with `{data}` on success, `null` on any failure.
+//
+// `upsertNewTag` previously did not await its fetch and returned "updated"
+// unconditionally, so creating a tag reported success even when the request
+// failed. Values were also concatenated raw into the query string, so a tag name
+// containing & or # truncated the request.
 
-    static getSuggestedTags = async(tagSearchKey) => {
-        try {
-            const response = await fetch(
-                currentHost + 'suggestion/tags?tag_pattern='+tagSearchKey + '&start_index=0&page_size=5'
-            );
-            let data = await response.json();
-            return {data};
-        }
-        catch (e) {
-            logError('TagReceiver.getSuggestedTags', e);
-            return null;
-        }
-    }   
-    
-    static getUserResourceCreationTag = async(email) => {
-        try {
-            const response = await fetch(
-                currentHost + 'tag/user/resource/creation?email='+email
-            );
-            let data = await response.json();
-            return {data};
-        }
-        catch (e) {
-            logError('TagReceiver.getUserResourceCreationTag', e);
-            return null;
-        }
-    }
+const encode = (value) => encodeURIComponent(value === null || value === undefined ? '' : value);
 
-    static upsertNewTag = async(tagData) => {
-        try {
-            let response = fetch(currentHost + 'tag?tag_name=' + tagData.tagName+'&tag_description=' + tagData.tagDescription, {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
-                    }
-                }
-            );
-            return "updated";
-        } catch (e) {
-            logError('TagReceiver.upsertNewTag', e);
-            return null;
-        }
-    }
+class TagReceiver {
+
+    static getSuggestedTags = async (tagSearchKey) => requestJson(
+        'TagReceiver.getSuggestedTags',
+        currentHost + 'suggestion/tags?tag_pattern=' + encode(tagSearchKey) + '&start_index=0&page_size=5'
+    )
+
+    static getUserResourceCreationTag = async (email) => requestJson(
+        'TagReceiver.getUserResourceCreationTag',
+        currentHost + 'tag/user/resource/creation?email=' + encode(email)
+    )
+
+    static upsertNewTag = async (tagData) => postJson(
+        'TagReceiver.upsertNewTag',
+        currentHost + 'tag?tag_name=' + encode(tagData && tagData.tagName)
+            + '&tag_description=' + encode(tagData && tagData.tagDescription)
+    )
 
 }
 

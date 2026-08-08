@@ -245,7 +245,7 @@ class UserQuestionSubmissionsSummary extends React.Component {
             return <div className='bg-gray-50 min-h-screen'>
                 <EducationalBridgeHeader/>
                 <div className='flex justify-center py-20'>
-                    <ClipLoader color="#2563EB" size="60"/>
+                    <ClipLoader color="#2563EB" size={60}/>
                 </div>
             </div>
         }

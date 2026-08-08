@@ -4,7 +4,6 @@ import {JSXUtils} from "../../utils/JSXUtils";
 import {UserDetailsUtil} from "../../utils/UserDetailsUtil";
 import TextEditor from "../adminPortal/platformCapabilities/TextEditor";
 import { MiscUtils } from '../../utils/MiscUtils';
-import {generalTextSize} from './../../constants/TextSizeConstants';
 import notify from '../../utils/notify';
 import ClipLoader from "react-spinners/ClipLoader";
 import Button from '../../components/common/Button';
@@ -12,46 +11,11 @@ import { typography } from '../../constants/designTokens';
 
 class QuestionComment extends React.Component {
 
-    getVotingJSX = () => {
-        // createdBy comes from the backend as a plain string (Google id / email / free text),
-        // not a resolved user object, so we display it as-is rather than assuming .name/.picture.
-        const createdBy = this.props.questionDetails.createdBy;
-        const createdByUserName = (createdBy && typeof createdBy === 'object')
-            ? (createdBy.name || '').replace(/(^\w{1})|(\s+\w{1})/g, letter => letter.toUpperCase())
-            : (createdBy || '');
-        const createdByPicture = (createdBy && typeof createdBy === 'object') ? createdBy.picture : null;
-        return <div className='py-3 px-2 border border-gray-100 bg-gray-50 rounded-lg'>
-            {this.props.questionDetails.isVotingDetailsRefreshing 
-                ? <div className='flex justify-center grow'><ClipLoader color="#2563EB" size={24}/></div>
-                :<div className='flex flex-row items-center'>
-                    <div className='flex flex-row items-center gap-1'>
-                        <div className='cursor-pointer text-success-600' onClick={this.props.upvoteQuestion}>
-                            {this.props.questionDetails.hasUserUpvoted ? <AiFillLike size={22}/> : <AiOutlineLike size={22}/>}
-                        </div>
-                        <div className={typography.caption + ' pr-3'}>{this.props.questionDetails.upvoteCount}</div>
-                        <div className='cursor-pointer text-danger-600' onClick={this.props.downvoteQuestion}>
-                            {this.props.questionDetails.hasUserDownvoted ? <AiFillDislike size={22}/> : <AiOutlineDislike size={22}/>}
-                        </div>
-                        <div className={typography.caption}>{this.props.questionDetails.downvoteCount}</div>
-                    </div>                 
-                    <div className='justify-end flex grow'>
-                        <div className='flex flex-row items-center gap-2 bg-white rounded-full px-2 py-1 border border-gray-100'>
-                            <span className={typography.caption}>Author:</span>
-                            {createdByPicture &&
-                                <img
-                                    className="rounded-full w-6 h-6"
-                                    src={createdByPicture}
-                                    alt={createdByUserName}
-                                    referrerPolicy="no-referrer"
-                                />
-                            }
-                            <span className='text-sm text-gray-700'>{createdByUserName}</span>
-                        </div>
-                    </div>
-                    
-                </div>
-            }
-        </div>
+    constructor(props) {
+        super(props);
+        // State was previously never initialised, so every read had to be guarded
+        // with `this.state != null && ...`.
+        this.state = { commentBoxData: undefined, isComposing: false };
     }
 
     getCommentReplyTextJSX = (commentIndex, replyIndex) => {
@@ -64,16 +28,11 @@ class QuestionComment extends React.Component {
                     onClick={() => this.updateTextBoxIndex(commentIndex, replyIndex)}>Reply</button>
                 {(this.props.questionDetails.commentIndexRefreshing==commentIndex && this.props.questionDetails.commentReplyIndexRefreshing==replyIndex)
                     ?<div className='flex items-center pl-2'><ClipLoader color="#2563EB" size={18}/></div>
-                    :<div className='flex flex-row items-center gap-1'>
-                        <div className='cursor-pointer text-success-600' onClick={() => this.props.upvoteQuestionComment(commentIndex, replyIndex)}>
-                            {this.props.questionComments[commentIndex].replies[replyIndex].hasUserUpvoted ? <AiFillLike size={16}/> : <AiOutlineLike size={16}/>}
-                        </div>
-                        <div className={typography.caption}>{this.props.questionComments[commentIndex].replies[replyIndex].upvoteCount}</div>
-                        <div className='cursor-pointer text-danger-600' onClick={() => this.props.downvoteQuestionComment(commentIndex, replyIndex)}>
-                            {this.props.questionComments[commentIndex].replies[replyIndex].hasUserDownvoted ? <AiFillDislike size={16}/> : <AiOutlineDislike size={16}/>}
-                        </div>
-                        <div className={typography.caption}>{this.props.questionComments[commentIndex].replies[replyIndex].downvoteCount}</div>
-                    </div>
+                    :this.getVoteControlsJSX(
+                        this.props.questionComments[commentIndex].replies[replyIndex],
+                        commentIndex,
+                        replyIndex
+                    )
                 }
             </div>;
         }
@@ -90,9 +49,16 @@ class QuestionComment extends React.Component {
                         <div className={typography.body + ' flex-1'} dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(reply.description)}}/>
                         {
                             (reply.userId == UserDetailsUtil.getUserGoogleId())
-                            ?<div className='px-2 py-1 text-primary-600 cursor-pointer'><AiOutlineEdit size={16}
-                                onClick={() => this.updateEditingCommentBoxIndex(commentIndex, replyIndex)}/>
-                            </div>
+                            // The handler sat on the icon inside a non-focusable div,
+                            // so authors could not edit their own reply by keyboard.
+                            ?<button
+                                type="button"
+                                className='shrink-0 p-1.5 rounded text-primary-600 hover:bg-primary-50 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500'
+                                onClick={() => this.updateEditingCommentBoxIndex(commentIndex, replyIndex)}
+                                aria-label="Edit your reply"
+                            >
+                                <AiOutlineEdit size={16} aria-hidden="true"/>
+                            </button>
                             :<div/>
                         }
                     </div>
@@ -156,19 +122,48 @@ class QuestionComment extends React.Component {
             {
                 (this.props.questionDetails.commentIndexRefreshing==index && this.props.questionDetails.commentReplyIndexRefreshing==null)
                 ?<div className='flex items-center pl-2'><ClipLoader color="#2563EB" size={18}/></div>
-                :<div className='flex flex-row items-center gap-1'>
-                    <div className='cursor-pointer text-success-600' onClick={() => this.props.upvoteQuestionComment(index, null)}>
-                        {this.props.questionComments[index].hasUserUpvoted ? <AiFillLike size={16}/> : <AiOutlineLike size={16}/>}
-                    </div>
-                    <div className={typography.caption}>{this.props.questionComments[index].upvoteCount}</div>
-                    <div className='cursor-pointer text-danger-600' onClick={() => this.props.downvoteQuestionComment(index, null)}>
-                        {this.props.questionComments[index].hasUserDownvoted ? <AiFillDislike size={16}/> : <AiOutlineDislike size={16}/>}
-                    </div>
-                    <div className={typography.caption}>{this.props.questionComments[index].downvoteCount}</div> 
-                </div>
+                :this.getVoteControlsJSX(this.props.questionComments[index], index, null)
             }
         </div>
-    } 
+    }
+
+    /**
+     * Up/down vote pair for a comment or a reply.
+     *
+     * The two variants of this were duplicated inline, and in both the vote control
+     * was a `<div onClick>` — so neither could be reached by keyboard and a screen
+     * reader announced only the count beside an inert icon. They are buttons now,
+     * with labels that say which way they vote and how the current state stands.
+     */
+    getVoteControlsJSX = (target, commentIndex, replyIndex) => {
+        const upvoteCount = (target && target.upvoteCount) || 0;
+        const downvoteCount = (target && target.downvoteCount) || 0;
+        const hasUpvoted = target && target.hasUserUpvoted;
+        const hasDownvoted = target && target.hasUserDownvoted;
+        const buttonClass = 'inline-flex items-center gap-1 px-1.5 py-1 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 ';
+        return <div className='flex flex-row items-center gap-1'>
+            <button
+                type="button"
+                className={buttonClass + 'text-success-600 hover:bg-success-50 focus:ring-success-500'}
+                onClick={() => this.props.upvoteQuestionComment(commentIndex, replyIndex)}
+                aria-pressed={hasUpvoted === true}
+                aria-label={'Upvote' + (hasUpvoted ? ' (you have upvoted)' : '')}
+            >
+                {hasUpvoted ? <AiFillLike size={16} aria-hidden="true"/> : <AiOutlineLike size={16} aria-hidden="true"/>}
+                <span className={typography.caption + ' tabular-nums'}>{upvoteCount}</span>
+            </button>
+            <button
+                type="button"
+                className={buttonClass + 'text-danger-600 hover:bg-danger-50 focus:ring-danger-500'}
+                onClick={() => this.props.downvoteQuestionComment(commentIndex, replyIndex)}
+                aria-pressed={hasDownvoted === true}
+                aria-label={'Downvote' + (hasDownvoted ? ' (you have downvoted)' : '')}
+            >
+                {hasDownvoted ? <AiFillDislike size={16} aria-hidden="true"/> : <AiOutlineDislike size={16} aria-hidden="true"/>}
+                <span className={typography.caption + ' tabular-nums'}>{downvoteCount}</span>
+            </button>
+        </div>;
+    }
 
     getCommentDetailJSX = (comment, index) => {
         if(this.props.questionDetails.commentIndexToEdit==index && this.props.questionDetails.replyIndexToEdit==null) {
@@ -181,9 +176,14 @@ class QuestionComment extends React.Component {
                         <div className={typography.body + ' flex-1'} dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(comment.description)}}/>
                         {
                             (comment.userId == UserDetailsUtil.getUserGoogleId())
-                            ?<div className='px-2 py-1 text-primary-600 cursor-pointer'><AiOutlineEdit size={16}
-                                onClick={() => this.updateEditingCommentBoxIndex(index, null)}/>
-                            </div>
+                            ?<button
+                                type="button"
+                                className='shrink-0 p-1.5 rounded text-primary-600 hover:bg-primary-50 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500'
+                                onClick={() => this.updateEditingCommentBoxIndex(index, null)}
+                                aria-label="Edit your comment"
+                            >
+                                <AiOutlineEdit size={16} aria-hidden="true"/>
+                            </button>
                             :<div/>
                         }
                     </div>
@@ -242,6 +242,7 @@ class QuestionComment extends React.Component {
         this.refreshTextBoxData();
         this.updateTextBoxIndex(null, null);
         this.updateEditingCommentBoxIndex(null, null);
+        this.setState({ isComposing: false });
     }
 
     isEditingExistingComment = () => {
@@ -300,6 +301,9 @@ class QuestionComment extends React.Component {
         this.props.updateQuestionComments(comments);
         this.refreshTextBoxData();
         this.updateTextBoxIndex(null, null);
+        // Close the composer after a successful post, otherwise the editor stayed
+        // open with its content cleared and looked like the post had failed.
+        this.setState({ isComposing: false });
     }
 
     getCommentPostBox = () => {
@@ -335,36 +339,81 @@ class QuestionComment extends React.Component {
         </div>
     }
 
+    startComposing = () => {
+        if (UserDetailsUtil.getUserGoogleId() == null) {
+            notify.info('Please sign in to join the discussion.');
+            return;
+        }
+        this.setState({ isComposing: true });
+    }
+
     getComments = () => {
         if(this.props.questionDetails.isCommentRefreshing==true) {
             return <div className='flex justify-center py-6'><ClipLoader color="#2563EB" size={24}/></div>
         }
+        // The top-level composer used to be permanently expanded, so a full
+        // rich-text editor with its own toolbar sat on the page whether or not
+        // anyone intended to write anything — it was the tallest element on the
+        // whole view. It is now opened deliberately. Reply and edit boxes are
+        // unaffected: those are already opened by an explicit action.
+        const isIdle = this.props.questionDetails.commentIndex == null
+            && this.props.questionDetails.replyIndex == null
+            && this.props.questionDetails.commentIndexToEdit == null
+            && this.props.questionDetails.replyIndexToEdit == null;
+        const isComposing = this.state != null && this.state.isComposing === true;
+
         return <div>
-                {
-                    (this.props.questionDetails.commentIndex == null 
-                        && this.props.questionDetails.replyIndex == null
-                        && this.props.questionDetails.commentIndexToEdit == null
-                        && this.props.questionDetails.replyIndexToEdit == null)
-                    ?this.getCommentPostBox()
-                    :<div/>}
+                {/* Only the top-level composer is rendered here. When a reply or an
+                    edit is in progress the box is rendered inline next to the comment
+                    it belongs to, so rendering it here as well would put two editors
+                    on the page at once. */}
+                {isIdle && (isComposing
+                    ? this.getCommentPostBox()
+                    : <div className='pb-4'>
+                        <Button size="sm" variant="secondary" onClick={this.startComposing}>
+                            Add a comment
+                        </Button>
+                    </div>
+                )}
                 {this.getCommentsJSX()}
             </div>;
     }
 
     render() {
-        if(typeof window == `undefined` || this.props.questionComments == undefined) {
-            if(typeof window != `undefined`){
-                this.props.initializeQuestionComments();
-            }
+        // This used to call `this.props.initializeQuestionComments()` from inside
+        // render whenever the comments were still undefined, which re-fired the
+        // fetch on every render pass until one landed. The parent loads comments in
+        // componentDidMount; an undefined value here simply means "not yet".
+        if (typeof window === 'undefined' || this.props.questionComments === undefined) {
             return <div className='py-3 px-2 border border-gray-100 bg-gray-50 rounded-lg flex flex-row items-center justify-center gap-2'>
-                <div className={typography.caption}>Loading comment section</div>
+                <div className={typography.caption}>Loading discussion</div>
                 <ClipLoader color="#2563EB" size={20}/>
             </div>
         }
-        return ( 
-            <div className='pt-4 sm:pt-6 pb-4'>
-                {this.getVotingJSX()}
-                <div className={typography.h3 + ' pt-6 pb-2'}>Comments</div>
+        const count = (this.props.questionComments || []).length;
+        return (
+            <div className='pb-2'>
+                {/* The vote controls and author credit that used to sit here now live
+                    in the solve page sidebar. Keeping them in both places meant two
+                    sets of vote buttons on one screen, and the pair here were
+                    click-handlers on <div>s, so they could not be reached by
+                    keyboard at all. */}
+                <div className='flex items-baseline justify-between gap-3 pb-3'>
+                    <h2 className={typography.h3}>
+                        Discussion
+                    </h2>
+                    {count > 0 &&
+                        <span className={typography.caption}>
+                            {count === 1 ? '1 comment' : count + ' comments'}
+                        </span>
+                    }
+                </div>
+                {count === 0 &&
+                    <p className={typography.caption + ' pb-3'}>
+                        No comments yet. If you solved this a different way, post it &mdash;
+                        that is usually the most useful thing on the page.
+                    </p>
+                }
                 {this.getComments()}
             </div>
         );

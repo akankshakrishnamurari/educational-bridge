@@ -174,7 +174,11 @@ class ChannelHome extends React.Component {
                             <span className="block text-sm font-semibold text-gray-900 group-hover:text-primary-700 transition-colors">
                                 {channel.channelName}
                             </span>
-                            <span className="block mt-1.5 text-xs font-medium text-primary-600 inline-flex items-center gap-1">
+                            {/* `block` and `inline-flex` are both display utilities.
+                                With `important: true` set globally, both compile to
+                                !important and which one wins is decided by stylesheet
+                                order rather than by the order written here. */}
+                            <span className="mt-1.5 text-xs font-medium text-primary-600 inline-flex items-center gap-1">
                                 View questions
                                 <span className="transition-transform group-hover:translate-x-0.5" aria-hidden="true">&rarr;</span>
                             </span>
@@ -193,7 +197,7 @@ class ChannelHome extends React.Component {
             return <div className="bg-gray-50 min-h-screen">
                 <EducationalBridgeHeader/>
                 <div className='flex justify-center py-20'>
-                    <ClipLoader color="#2563EB" size="60"/>
+                    <ClipLoader color="#2563EB" size={60}/>
                 </div>
             </div>;
         }

@@ -127,12 +127,48 @@ class QuestionCreation extends React.Component {
         });
     }
 
-    /** Plain-text length of rich HTML, for emptiness checks. */
-    textLength = (html) => {
+    /** Plain text of rich HTML, for emptiness checks and title derivation. */
+    toPlainText = (html) => {
         if (typeof html !== 'string') {
-            return 0;
+            return '';
         }
-        return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim().length;
+        return html
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    /** Plain-text length of rich HTML, for emptiness checks. */
+    textLength = (html) => this.toPlainText(html).length
+
+    /**
+     * Short display name for the question record.
+     *
+     * This field used to be sent as the literal string 'New Question' for every
+     * question anyone authored. That is the direct cause of the rows in the bank
+     * called "New Question": they are not corrupt data, they are what this form
+     * writes. Deriving the name from the opening words of the question at least
+     * describes the record it names.
+     *
+     * Truncated at a word boundary so the name does not end mid-word, and capped
+     * well below any column limit.
+     */
+    deriveQuestionName = (description) => {
+        const text = this.toPlainText(description);
+        if (text.length === 0) {
+            return 'Untitled question';
+        }
+        const LIMIT = 80;
+        if (text.length <= LIMIT) {
+            return text;
+        }
+        const clipped = text.slice(0, LIMIT);
+        const lastSpace = clipped.lastIndexOf(' ');
+        return (lastSpace > 40 ? clipped.slice(0, lastSpace) : clipped) + '…';
     }
 
     validate = () => {
@@ -171,7 +207,7 @@ class QuestionCreation extends React.Component {
         const question = {
             id: details.id,
             questionType: details.questionType,
-            name: 'New Question',
+            name: this.deriveQuestionName(details.questionDescription),
             description: details.questionDescription,
             options: options,
             tagIds: (details.tags || []).map((tag) => tag.id),
@@ -192,9 +228,6 @@ class QuestionCreation extends React.Component {
             }
             notify.success('Question saved.');
             window.location.href = currentURLHost + "question/view?question_id=" + questionData.data.id;
-        }).catch(()=>{
-            notify.error('Could not save the question. Please try again.');
-            this.setState({ isSubmitting: false });
         });
     }
 
@@ -272,7 +305,7 @@ class QuestionCreation extends React.Component {
             return <div className='bg-gray-50 min-h-screen'>
                 <EducationalBridgeHeader/>
                 <div className='flex justify-center py-20'>
-                    <ClipLoader color="#2563EB" size="60"/>
+                    <ClipLoader color="#2563EB" size={60}/>
                 </div>
             </div>
         }

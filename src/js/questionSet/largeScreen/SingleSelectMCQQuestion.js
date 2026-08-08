@@ -85,6 +85,10 @@ class SingleSelectMCQQuestion extends React.Component {
             reviewMode={reviewMode}
             distribution={this.getDistribution()}
             groupName={'answer-' + (this.props.questionDetails.id || 'question')}
+            // Elimination is only offered where the learner is actually solving.
+            // The authoring preview and the review page both pass neither prop.
+            eliminatedIds={this.props.eliminatedIds || null}
+            onToggleEliminate={this.props.onToggleEliminate || null}
         />;
     }
 

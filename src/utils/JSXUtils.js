@@ -2,87 +2,50 @@ import React from "react";
 import {generalTextSize} from "./../constants/TextSizeConstants";
 import {prepareContent} from "./../components/common/MathContent";
 
+// Small shared JSX helpers.
+//
+// FIVE HELPERS WERE REMOVED FROM HERE
+// -----------------------------------
+// `getQuestionRenderingJSX`, `getQuestionOptionRenderingJSX`,
+// `showQuestionPagingSection` and `getQuestionNumberView` had no call sites left
+// after the question and paper pages were rebuilt on real components. They were
+// not merely unused, they were broken:
+//
+//   - getQuestionNumberView called `this.getRemainingTimeBlock()`, a method that
+//     does not exist on this class, so it threw the moment it was rendered.
+//   - showQuestionPagingSection drew four exam controls ("Save and Previous",
+//     "Clear Response", "Mark For Review", "Save and Next") of which three had no
+//     handler at all and the fourth pointed at a method that does not exist here
+//     either. The real exam controls live in paperSet/PaperView.
+//   - Both, plus the two rendering helpers, nested a <div> inside a <p>, which is
+//     invalid HTML that React reports and the browser silently restructures.
+//
+// Keeping them meant every future reader had to work out which of two paging
+// implementations was the live one.
+
 export class JSXUtils {
 
-    static getQuestionRenderingJSX(questionText) {
-        return <div>
-            <p className="text-xl text-left pl-10 border border-slate-200">
-                <div dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(questionText)}}></div>
-            </p>
-        </div>;
-    }
-
-    static getQuestionOptionRenderingJSX(optionNumber, optionText) {
-        return <button className="flex mx-2 my-2 bg-white transition-colors rounded text-gray-700 border border-gray-300 px-6 py-2 text-xs hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-            <div className="flex flex-row">
-                <div>
-                    <p className={generalTextSize + " px-2"}>
-                        {optionNumber} :
-                    </p>
-                </div>
-                <div>
-                    <p className={generalTextSize}>
-                        <div dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(optionText)}}></div>
-                    </p>
-                </div>
-            </div>  
-        </button>;
-    }
-
-    static getTagViewJSX( optionText) {
-        return <div className="flex bg-white transition-colors rounded text-gray-700 border border-gray-300 px-3 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-            <p className={generalTextSize}>
-                <div dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(optionText)}}></div>
-            </p>
-        </div>;
-    }
-
-    static showQuestionPagingSection = () => {
-        return <div>
-            <div className="flex items-center justify-center py-10 lg:px-0 sm:px-6 px-4">
-                <div className="lg:w-5/5 w-full  flex items-center justify-between border-t border-gray-200">
-                    <div className="flex items-center pt-3 text-gray-600 hover:text-primary-700 cursor-pointer">
-                        <svg width="14" height="8" viewBox="0 0 14 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M1.1665 4H12.8332" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"
-                                  stroke-linejoin="round"/>
-                            <path d="M1.1665 4L4.49984 7.33333" stroke="currentColor" stroke-width="1.25"
-                                  stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M1.1665 4.00002L4.49984 0.666687" stroke="currentColor" stroke-width="1.25"
-                                  stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        <p className="text-sm ml-3 font-medium leading-none ">
-                            <b>Save and Previous</b>
-                        </p>
-                    </div>
-                    <div className="flex items-center pt-3 text-gray-600 hover:text-primary-700 cursor-pointer">
-                        <p className="text-sm font-medium leading-none mr-3">
-                            <b>Clear Response</b></p>
-                    </div>
-                    <div className="flex items-center pt-3 text-gray-600 hover:text-primary-700 cursor-pointer" onClick={this.markQuestionForReview}>
-                        <p className="text-sm font-medium leading-none mr-3">
-                            <b>Mark For Review</b></p>
-                    </div>
-                    <div className="flex items-center pt-3 text-gray-600 hover:text-primary-700 cursor-pointer">
-                        <p className="text-sm font-medium leading-none mr-3">
-                            <b>Save and Next</b></p>
-                        <svg width="14" height="8" viewBox="0 0 14 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M1.1665 4H12.8332" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"
-                                  stroke-linejoin="round"/>
-                            <path d="M9.5 7.33333L12.8333 4" stroke="currentColor" stroke-width="1.25"
-                                  stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M9.5 0.666687L12.8333 4.00002" stroke="currentColor" stroke-width="1.25"
-                                  stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-
-                    </div>
-                </div>
-            </div>
-        </div>;
+    /**
+     * Small pill used to display a tag name.
+     *
+     * The rich text goes in a <span>, not a <div> inside a <p>: the previous markup
+     * put a block element inside a paragraph, so the browser closed the paragraph
+     * early and the pill's padding applied to an empty element. The focus-ring
+     * classes were also dropped, because this is not a focusable element and
+     * advertising a focus style on one is misleading.
+     */
+    static getTagViewJSX(optionText) {
+        return <span className="inline-flex items-center bg-white rounded text-gray-700 border border-gray-300 px-3">
+            <span
+                className={generalTextSize}
+                dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(optionText)}}
+            />
+        </span>;
     }
 
     static buildMCQOptionsPreviewData = (questionOptions, numberOfOptions) => {
         let options = [];
-        questionOptions.forEach((option,index)=>{
+        (questionOptions || []).forEach((option,index)=>{
             if(index>=numberOfOptions) {
                 return options;
             }
@@ -99,30 +62,12 @@ export class JSXUtils {
 
     static getNormalisedPreviewOptionId = (options, optionId) => {
         let targetOption = -1;
-        options.forEach((option, index)=>{
+        (options || []).forEach((option, index)=>{
             if(option.id === optionId) {
                 targetOption = index;
             }
         });
         return targetOption;
-    }
-
-    static getQuestionNumberView(questionNumber, color) {
-        if(color === undefined) {
-            color = "indigo-100";
-
-        }
-        return <div className="flex justify-between w-full">
-            <div
-                className={"flex flex-col lg:flex-row w-full items-start rounded shadow py-2 bg-" + color + " border"+ color}>
-                <div className={"flex flex-row w-full  lg:w-12/12 "+  color}>
-                    <div className="text-xs sm:text-base md:text-lg xl:text-xl">
-                        Question Number : {questionNumber}
-                    </div>
-                    {this.getRemainingTimeBlock()}
-                </div>
-            </div>
-        </div>;
     }
 
     /**

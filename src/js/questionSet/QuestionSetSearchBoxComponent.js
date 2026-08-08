@@ -3,10 +3,16 @@ import { connect } from 'react-redux';
 import {saveQuestionSet} from '../../store/actions/solgressAction';
 import QuestionsReceiver from "../../apis/QuestionsReceiver";
 import TagReceiver from '../../apis/TagReceiver';
-import ChannelReceiver from '../../apis/ChannelReceiver';
-import {searchBoxCSS, buttonBesideSearchBoxCSS, searchSuggestionTextSize, generalTextSize} from './../../constants/TextSizeConstants';
+import {AiOutlineSearch, AiOutlinePlus} from "react-icons/ai";
 import {currentURLHost} from './../../constants/hostConfig';
 import TagFilterViewLarge from './TagFilter/TagFilterViewLarge';
+import { dataOf, listOf } from '../../apis/unwrap';
+
+// Fallback shape for the paged list endpoint, used when a request fails so
+// render paths that read `.questions` / `.pageCount` keep working.
+const EMPTY_PAGE = { questions: [], pageCount: 0, pageSize: 10 };
+
+const SEARCH_DEBOUNCE_MS = 300;
 
 const mapDispatchToProps = dispatch => ({
     saveQuestionSet: (payload) => dispatch(saveQuestionSet(payload))
@@ -19,243 +25,214 @@ const mapStateToProps = state => {
     };
 }
 
+/**
+ * Search-and-filter bar above the question picker in the paper builder.
+ *
+ * WHAT WAS WRONG
+ * --------------
+ * The suggestion list was shown and hidden by `onMouseEnter` / `onMouseLeave` on
+ * the wrapper. That has two consequences: on a touch screen the list could not be
+ * opened at all, and with a mouse the list closed as soon as the pointer left the
+ * wrapper — which happens on the way to the suggestion you were reaching for. Each
+ * suggestion was also a `<div onClick>` with no `key`, so none of them were
+ * focusable and React re-created the whole list on every keystroke.
+ *
+ * Every keystroke additionally fired an unthrottled list query with no ordering
+ * guarantee, so the results could settle on a prefix of what had been typed.
+ *
+ * A `getTagButton` helper was removed: it had no call site and rendered an
+ * `<input>` inside a `<select>`, which is not valid markup.
+ *
+ * The channel-suggestion half of this component was removed too. It was reachable
+ * only when `searchCriteria === 'SEARCH_AND_ADD_CHANNELS'`, a value nothing in the
+ * app ever sets (the only control that could set it was the commented-out option in
+ * the dead `getTagButton`), and it read `questionSet.channels`, which this page
+ * never populates — so the single path that could reach it would have thrown on
+ * `undefined.forEach`.
+ */
 class QuestionSetSearchBoxComponent extends React.Component {
 
-    updateSearchedTagKey = (event) => {
-        let payload = {...this.props.questionSet};
-        payload.isTagSearchActive = true;
-        payload.isChannelSearchActive = false;
-        this.props.saveQuestionSet(payload);
-        TagReceiver.getSuggestedTags(event.target.value).then(tagData=>{
-            let payload = {...this.props.questionSet};
+    constructor(props) {
+        super(props);
+        this.state = { tagQuery: '', isSuggestionListOpen: false };
+    }
 
-            let suggestedTags = [...tagData.data];
-            let existingTagIds = [];
-            for(let i=0; i<payload.tags.length; i++) {
-                existingTagIds.push(payload.tags[i].id);
+    componentWillUnmount() {
+        if (this.searchTimer != null) {
+            clearTimeout(this.searchTimer);
+        }
+        if (this.tagTimer != null) {
+            clearTimeout(this.tagTimer);
+        }
+    }
+
+    getAppliedTags = () => {
+        const tags = this.props.questionSet && this.props.questionSet.tags;
+        return Array.isArray(tags) ? tags : [];
+    }
+
+    getSuggestedTags = () => {
+        const suggested = this.props.questionSet && this.props.questionSet.suggestedTags;
+        return Array.isArray(suggested) ? suggested : [];
+    }
+
+    onTagQueryChange = (value) => {
+        this.setState({ tagQuery: value, isSuggestionListOpen: true });
+        if (this.tagTimer != null) {
+            clearTimeout(this.tagTimer);
+        }
+        this.tagTimer = setTimeout(() => this.fetchTagSuggestions(value), SEARCH_DEBOUNCE_MS);
+    }
+
+    fetchTagSuggestions = (value) => {
+        this.latestTagQuery = value;
+        TagReceiver.getSuggestedTags(value).then(tagData=>{
+            if (this.latestTagQuery !== value) {
+                return;
             }
-            suggestedTags = suggestedTags.filter(function(tag) {return !existingTagIds.includes(tag.id)});
-            payload.suggestedTags = suggestedTags; 
-            this.props.saveQuestionSet(payload);
+            const existingTagIds = this.getAppliedTags().map((tag) => tag.id);
+            const suggestedTags = listOf(tagData).filter((tag) => !existingTagIds.includes(tag.id));
+            this.props.saveQuestionSet({
+                ...this.props.questionSet,
+                suggestedTags,
+            });
         });
     }
 
-    addNewTag = (index) => {
-        let payload = {...this.props.questionSet};
-        let tags = [...payload.tags];
-        let suggestedTags = [...payload.suggestedTags];
-        tags.push(suggestedTags[index]);
-        let tagId = suggestedTags[index].id;
-        suggestedTags = suggestedTags.filter(function(tag) { return tag.id !== tagId});
-        payload.tags = tags;
-        payload.suggestedTags = suggestedTags;
-        payload.isTagSearchActive = false;
-        let tagIds = [];
-        tags.forEach(tag =>{
-            tagIds.push(tag.id);
-        });
-        let channelIds = [];
-        this.props.questionSet.channels.forEach(channel =>{
-            channelIds.push(channel.id);
-        });
-        QuestionsReceiver.getAllFilteredQuestions(this.props.questionSet.searchedKey,tagIds, channelIds).then(questionsData=>{
-            payload.questions = questionsData.data;
-            this.props.saveQuestionSet(payload);
-        });
-    }
-
-    showSuggestedTags = () => {
-        if(this.props.questionSet.isTagSearchActive===false) {
-            return <div/>;
+    addNewTag = (tagToAdd) => {
+        if (tagToAdd == null || tagToAdd.id == null) {
+            return;
         }
-        let response = [];
-        let suggestedTags = [...this.props.questionSet.suggestedTags];
-        for(let index=0; index<suggestedTags.length; index++) {
-            response.push(
-                        <div className= {searchSuggestionTextSize + "z-50 py-1 border border-slate-200 hover:bg-gray-50 w-full"}  onClick={()=>this.addNewTag(index)} >
-                            <b>+ </b>
-                            {suggestedTags[index].tagName}
-                        </div>
-            );
-        }
-        return response;
+        const tags = [...this.getAppliedTags(), tagToAdd];
+        const suggestedTags = this.getSuggestedTags().filter((tag) => tag.id !== tagToAdd.id);
+        this.setState({ isSuggestionListOpen: false });
+        this.refreshQuestions({ tags, suggestedTags });
     }
 
-    updateSearchedChannelKey = (event) => {
-        let payload = {...this.props.questionSet};
-        payload.isChannelSearchActive = true;
-        this.props.saveQuestionSet(payload);
-        ChannelReceiver.getSuggestedChannels(event.target.value).then(channelData=>{
-            let payload = {...this.props.questionSet};
-
-            let suggestedChannels = [...channelData.data];
-            let existingChannelIds = [];
-            for(let i=0; i<payload.channels.length; i++) {
-                existingChannelIds.push(payload.channels[i].id);
-            }
-            suggestedChannels = suggestedChannels.filter(function(channel) {return !existingChannelIds.includes(channel.id)});
-            payload.suggestedChannels = suggestedChannels;
-            // payload = Object.assign({suggestedChannels: suggestedChannels}, payload);   
-            this.props.saveQuestionSet(payload);
+    /**
+     * Single query path, so the search text and the applied tags always travel
+     * together. The three call sites here previously each built their own call and
+     * dropped a different part of the criteria.
+     */
+    refreshQuestions = ({ tags, suggestedTags, searchedKey }) => {
+        const set = this.props.questionSet || {};
+        const resolvedTags = tags === undefined ? this.getAppliedTags() : tags;
+        const resolvedSearch = searchedKey === undefined ? (set.searchedKey || '') : searchedKey;
+        QuestionsReceiver.getAllFilteredQuestions(
+            resolvedSearch,
+            resolvedTags.map((tag) => tag.id),
+            [],
+            0,
+            set.currentPageSize || 10
+        ).then(questionsData=>{
+            this.props.saveQuestionSet({
+                ...this.props.questionSet,
+                tags: resolvedTags,
+                ...(suggestedTags === undefined ? {} : { suggestedTags }),
+                questions: dataOf(questionsData, EMPTY_PAGE),
+                searchedKey: resolvedSearch,
+                currentPage: 1,
+            });
         });
     }
 
-    addNewChannel = (index) => {
-        let payload = {...this.props.questionSet};
-        let channels = [...payload.channels];
-        let suggestedChannels = [...payload.suggestedChannels];
-        channels.push(suggestedChannels[index]);
-        let channelId = suggestedChannels[index].id;
-        suggestedChannels = suggestedChannels.filter(function(channel) { return channel.id !== channelId});
-        payload.channels = channels;
-        payload.suggestedChannels = suggestedChannels;
-        payload.isChannelSearchActive = false;
-        let channelIds = [];
-        channels.forEach(channel =>{
-            channelIds.push(channel.id);
-        });
-        let tagIds = [];
-        this.props.questionSet.tags.forEach(tag =>{
-            tagIds.push(tag.id);
-        });
-        QuestionsReceiver.getAllFilteredQuestions(this.props.questionSet.searchedKey, tagIds, channelIds).then(questionsData=>{
-            payload.questions = questionsData.data;
-            this.props.saveQuestionSet(payload);
-        });
-    }
-
-    showSuggestedChannels = () => {
-        if(this.props.questionSet.isChannelSearchActive===false) {
-            return <div/>;
+    onQuestionSearchChange = (value) => {
+        if (this.searchTimer != null) {
+            clearTimeout(this.searchTimer);
         }
-        let response = [];
-        let suggestedChannels = [...this.props.questionSet.suggestedChannels];
-        for(let index=0; index<suggestedChannels.length; index++) {
-            response.push(
-                        <div className="text-xl py-1 border border-slate-200 hover:bg-gray-50 w-full"  onClick={()=>this.addNewChannel(index)} >
-                            <b>+ </b>
-                            {suggestedChannels[index].channelName}
-                        </div>
-            );
+        this.searchTimer = setTimeout(() => {
+            this.latestSearch = value;
+            const set = this.props.questionSet || {};
+            QuestionsReceiver.getAllFilteredQuestions(
+                value,
+                this.getAppliedTags().map((tag) => tag.id),
+                [],
+                0,
+                set.currentPageSize || 10
+            ).then(questionsData=>{
+                if (this.latestSearch !== value) {
+                    return;
+                }
+                this.props.saveQuestionSet({
+                    ...this.props.questionSet,
+                    questions: dataOf(questionsData, EMPTY_PAGE),
+                    searchedKey: value,
+                    currentPage: 1,
+                });
+            });
+        }, SEARCH_DEBOUNCE_MS);
+    }
+
+    getSuggestionListJSX = () => {
+        if (!this.state.isSuggestionListOpen) {
+            return null;
         }
-        return response;
-    }
-
-    deactivateSearch = () => {
-        let payload = {...this.props.questionSet};
-        payload.isChannelSearchActive = false;
-        payload.isTagSearchActive = false;
-        this.props.saveQuestionSet(payload);
-    }
-
-    activateSearch = () => {
-        if(this.props.questionSet.searchCriteria === 'SEARCH_AND_ADD_TAGS') {
-            this.activateTagSearch();
+        const suggestedTags = this.getSuggestedTags();
+        if (suggestedTags.length === 0) {
+            return null;
         }
-        else if(this.props.questionSet.searchCriteria === 'SEARCH_AND_ADD_CHANNELS') {
-            this.activateChannelSearch();
-        }
-    }
-
-    activateTagSearch = () => {
-        let payload = {...this.props.questionSet};
-        payload.isTagSearchActive = true;
-        payload.isChannelSearchActive = false;
-        this.props.saveQuestionSet(payload);
-    }
-
-    activateChannelSearch = () => {
-        let payload = {...this.props.questionSet};
-        payload.isChannelSearchActive = true;
-        payload.isTagSearchActive = false;
-        this.props.saveQuestionSet(payload);
-    }
-
-    updateQuestionSearchedKey = (searchedKey) => {
-        let tagIds = [];
-        this.props.questionSet.tags.forEach(tag =>{
-            tagIds.push(tag.id);
-        });
-        let channelIds = [];
-        QuestionsReceiver.getAllFilteredQuestions(searchedKey, tagIds, channelIds).then(questionsData=>{
-            let payload = {...this.props.questionSet};
-            payload.questions = questionsData.data;
-            payload.searchedKey = searchedKey;
-            this.props.saveQuestionSet(payload);
-        });
-    }
-
-    showSearchSuggestions = () => {
-        if(this.props.questionSet.isTagSearchActive === true) {
-            return this.showSuggestedTags();
-        } 
-        else if(this.props.questionSet.isChannelSearchActive === true) {
-            return this.showSuggestedChannels();
-        }
-    }
-
-    updateSearchedKey = (event) => {
-         if(this.props.questionSet.searchCriteria === 'SEARCH_AND_ADD_TAGS') {
-            this.updateSearchedTagKey(event);
-        }
-        else {
-            this.updateQuestionSearchedKey(event.target.value);
-        } 
-    }
-
-    updateSearchCriteria = (event) => {
-        let payload = {...this.props.questionSet};
-        payload.searchCriteria = event.target.value;
-        this.props.saveQuestionSet(payload);
-        this.updateQuestionSearchedKey("");
-    }
-
-    getSearchBoxJSX = () => {
-        return <div className=" px-w-full flex flex-col sm:flex-row flex-nowrap sm:flex-wrap xl:flex-nowrap justify-center items-center py-1 lg:py-2 px-1 lg:px-5">
-            <div className='flex flex-col relative sm:w-8/12 md:w-9/12 xl:w-7/12 2xl:6/12 px-3'
-                onMouseLeave={()=>this.deactivateSearch()} onMouseEnter={()=>this.activateSearch()}
-            >
-                <input 
-                    type="text" 
-                    className = {searchBoxCSS + " px-4"}
-                    placeholder="Search questions"
-                    onChange={(event)=>this.updateSearchedKey(event)}
-                />
-                <div className='w-full'>
-                    <div className='flex absolute flex-col w-full bg-gray-100'>
-                        {this.showSearchSuggestions()}
-                    </div>
-                </div>
-            </div>
-            <div>
-                <button className={buttonBesideSearchBoxCSS}
-                    onClick={() => window.location.href = currentURLHost + 'question/upsert'}
-                >
-                    <p className={generalTextSize + " font-semi-bold"}>
-                        Add New Question
-                    </p>
-                </button>
-            </div>
-        </div>;
-    }
-
-    getTagButton = (tagName, tagPrefix) => {
-        return <div className='pr-3'>
-            <select className={generalTextSize + " border bg-white rounded py-2 outline-none px-3"}
-            // value={this.props.paperSet.searchCriteria}
-            onChange={(event => this.updateSearchCriteria(event))}
-        >
-            <input></input>
-            <option className={"py-1 " + generalTextSize } value={tagName}>{tagName}</option>
-            {/* <option className="py-1 text-xs lg:text-sm xl:text-md" value="SEARCH_AND_ADD_CHANNELS" disabled>Filter By Channels</option> */}
-        </select>
-        </div>
+        return <ul className='absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-md py-1'>
+            {suggestedTags.map((tag) => (
+                <li key={tag.id}>
+                    <button
+                        type="button"
+                        className='flex items-center gap-2 w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 focus:outline-none focus:bg-gray-50'
+                        onClick={()=>this.addNewTag(tag)}
+                    >
+                        <AiOutlinePlus size={13} className='shrink-0 text-gray-400' aria-hidden="true"/>
+                        <span className='truncate'>{tag.tagName}</span>
+                    </button>
+                </li>
+            ))}
+        </ul>;
     }
 
     render() {
-        return <div className = "w-full x">
-            {this.getSearchBoxJSX()}
-            <TagFilterViewLarge/>
+        return <div className='w-full'>
+            <div className='flex flex-col sm:flex-row items-stretch sm:items-center gap-2 py-2'>
+                <div className='relative flex-1 min-w-0'>
+                    <AiOutlineSearch
+                        size={16}
+                        className='absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none'
+                    />
+                    <input
+                        type="search"
+                        className='w-full h-10 pl-9 pr-3 text-sm text-gray-800 placeholder-gray-400 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-100'
+                        placeholder="Search questions to add"
+                        onChange={(event)=>this.onQuestionSearchChange(event.target.value)}
+                        aria-label="Search questions to add"
+                    />
+                </div>
+                <div className='relative flex-1 min-w-0'>
+                    <input
+                        type="text"
+                        className='w-full h-10 px-3 text-sm text-gray-800 placeholder-gray-400 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-100'
+                        placeholder="Add a tag filter"
+                        value={this.state.tagQuery}
+                        onChange={(event)=>this.onTagQueryChange(event.target.value)}
+                        onFocus={()=>this.setState({ isSuggestionListOpen: true })}
+                        // Closed on blur rather than mouse-out. A short delay lets a
+                        // click on a suggestion land before the list unmounts, which
+                        // the previous onMouseLeave version raced against.
+                        onBlur={()=>setTimeout(()=>this.setState({ isSuggestionListOpen: false }), 150)}
+                        aria-label="Add a tag filter"
+                    />
+                    {this.getSuggestionListJSX()}
+                </div>
+                <a
+                    href={currentURLHost + 'question/upsert'}
+                    target="_blank"
+                    rel="noreferrer"
+                    className='shrink-0 inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1'
+                >
+                    <AiOutlinePlus size={15} aria-hidden="true"/>
+                    New question
+                </a>
+            </div>
+            <TagFilterViewLarge
+                appliedTags = {this.getAppliedTags()}
+                onFiltersChanged = {(tags) => this.refreshQuestions({ tags })}
+            />
         </div>;
     }
 

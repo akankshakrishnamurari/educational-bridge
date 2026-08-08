@@ -18,13 +18,16 @@
   cursor: col-resize;
 }
 
-.App {
-  text-align: center;
-}
+/* `.App` used to carry `text-align: center` — the Create React App scaffolding
+   default. Because it sits on the app root in App.js, every page inherited
+   centred text, so question stems, answer options, solutions and comment bodies
+   all rendered centred unless a component happened to set an explicit alignment
+   utility. Prose is read from a left edge; centring it makes each line start in
+   a different place and is the single biggest reason the solve page looked
+   unfinished. Removed rather than overridden so nothing has to fight it.
 
-/* Removed unused Create React App scaffolding styles (.App-logo, .App-header,
-   .App-link). They carried the dark #282c34 / #61dafb defaults and were not
-   referenced by any component. */
+   Also removed earlier: unused CRA scaffolding styles (.App-logo, .App-header,
+   .App-link), which carried the dark #282c34 / #61dafb defaults. */
 
 .div-correct-ans {
      background-image: 
@@ -32,13 +35,3 @@
      background-repeat: no-repeat, no-repeat;
      background-position: right, left; 
 }
-
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-

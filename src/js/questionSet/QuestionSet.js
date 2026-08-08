@@ -19,6 +19,12 @@ import EmptyState from '../../components/common/EmptyState';
 import Footer from '../../components/common/Footer';
 import QuestionListItem from '../../components/questionSet/QuestionListItem';
 import { typography, layout } from '../../constants/designTokens';
+import { dataOf, listOf } from '../../apis/unwrap';
+
+// Shape the list endpoint returns. Used as the fallback when a request fails so
+// the render path, which reads `set.questions` and `set.pageCount`, keeps working
+// instead of throwing on a null response.
+const EMPTY_PAGE = { questions: [], pageCount: 0, pageSize: 10 };
 
 const mapDispatchToProps = dispatch => ({
     saveQuestionSet: (payload) => dispatch(saveQuestionSet(payload)),
@@ -47,8 +53,18 @@ class QuestionSet extends React.Component {
     getPreDecidedTags = async () => { // Workaround : In case it's linked from my created questions. We pick this tag from session storage
         if( window.sessionStorage.getItem('createdByMe')==="true" ){
             let tags = [];
-            await TagReceiver.getUserResourceCreationTag(JSON.parse(sessionStorage.getItem("userDetails")).email).then( tagData=> {
-                    tags.push({...tagData.data})
+            // Was `JSON.parse(sessionStorage.getItem("userDetails")).email`, which
+            // threw for a signed-out visitor arriving on a link that still had the
+            // `createdByMe` flag set in their session.
+            const email = UserDetailsUtil.getUserEmail();
+            if (email === null) {
+                return [];
+            }
+            await TagReceiver.getUserResourceCreationTag(email).then( tagData=> {
+                    const tag = dataOf(tagData);
+                    if (tag !== null && tag.id) {
+                        tags.push({...tag});
+                    }
                 }
             );
             return tags;
@@ -58,6 +74,61 @@ class QuestionSet extends React.Component {
 
     resetResourceCreationSessionStorage = () => {
         window.sessionStorage.setItem('createdByMe',"false");
+    }
+
+    /**
+     * Default classification filter for a bare visit to this page.
+     *
+     * WHY THIS EXISTS
+     * ---------------
+     * The unfiltered list endpoint returns rows in an order that puts the oldest
+     * records first, and the oldest records are seed data: two questions literally
+     * named "New Question" whose body reads "This is a sample Question. Please
+     * update it", plus a batch of hand-typed arithmetic used to smoke-test the
+     * submission flow. None of them carry a Subject tag, so they cannot be filtered,
+     * studied, or placed in the syllabus — and they filled the entire first page,
+     * which meant every new visitor's first impression of the question bank was
+     * placeholder content.
+     *
+     * The `fulfilled` flag looks like it should identify finished questions but does
+     * not: it is false for the imported questions too, and true for several of the
+     * seed rows, so it carries no usable signal.
+     *
+     * Rather than hiding rows client-side (which would leave gaps in a server-paged
+     * list and make the page counts wrong), this applies a real filter for the
+     * source of the actual bank. It is returned as an ordinary tag, so it appears in
+     * the filter bar as a normal chip and can be removed like any other — the
+     * default is visible rather than hidden behaviour.
+     *
+     * Resolved at runtime instead of hardcoding an id, and a failed lookup simply
+     * yields no default, leaving the previous unfiltered behaviour intact.
+     */
+    getDefaultClassificationTag = async () => {
+        const response = await TagReceiver.getSuggestedTags('Source : ');
+        const candidates = listOf(response).filter(
+            (tag) => tag && tag.id && typeof tag.tagName === 'string'
+                && tag.tagName.toLowerCase().startsWith('source :')
+        );
+        return candidates.length === 1 ? [{ ...candidates[0] }] : [];
+    }
+
+    /**
+     * True when the visitor arrived with an explicit intent — a channel link, a
+     * search, or "my created questions" — in which case no default is applied.
+     */
+    hasExplicitFilter = () => {
+        if (typeof window === 'undefined') {
+            return true;
+        }
+        const params = new URLSearchParams(window.location.search);
+        const searchText = params.get('search_text');
+        const hasSearch = (searchText !== null && searchText !== '')
+            || (this.props.generalInfo !== undefined
+                && this.props.generalInfo.searchText !== undefined
+                && this.props.generalInfo.searchText !== '');
+        return hasSearch
+            || this.getChannelIdsFromUrl().length > 0
+            || window.sessionStorage.getItem('createdByMe') === 'true';
     }
 
     /**
@@ -75,51 +146,106 @@ class QuestionSet extends React.Component {
 
     initializeQuestions = async () => {
         let tags = await this.getPreDecidedTags();
-        const search = window.location.search;
-        let tagIds = [];
-        tags.forEach(tag => {
-            tagIds.push(tag.id);
-        });
+        if (tags.length === 0 && !this.hasExplicitFilter()) {
+            tags = await this.getDefaultClassificationTag();
+        }
 
         let searchText = "";
         let searchTextQueryParam = new URLSearchParams(window.location.search).get('search_text');
         if(searchTextQueryParam!=null) {
             searchText = searchTextQueryParam;
         }
-        if(typeof this.props.generalInfo != "undefined") {
+        if(typeof this.props.generalInfo != "undefined" && this.props.generalInfo.searchText) {
             searchText = this.props.generalInfo.searchText;
         }
-        // The channels page links here as `questions?channel_id=<id>`, but this
-        // page never read that parameter and always sent an empty channel filter,
-        // so every one of those links silently showed the unfiltered list. The API
-        // has supported `channel_ids` all along.
-        const channelIds = this.getChannelIdsFromUrl();
-        await QuestionsReceiver.getAllFilteredQuestions(searchText, tagIds, channelIds, 0, 10).then(paperData=>{
-            let payload = {};
-            payload.tags = tags;
-            payload.suggestedTags = [];
-            payload.isTagSearchActive = false;
-            payload.questions = paperData.data;
-            payload.searchedKey = "";
-            payload.helpSectionEnabled = false;
-            payload.searchCriteria = "SEARCH_BY_QUESTIONS";
-            payload.currentPage = 1;
-            payload.currentPageSize = 10;
+
+        await this.loadQuestions({
+            tags,
+            searchText,
+            pageNumber: 0,
+            pageSize: 10,
+            isInitialLoad: true,
+        });
+        await this.loadPapers(tags);
+    }
+
+    /**
+     * THE single question-list query.
+     *
+     * Every path that changed the list — first load, live search, paging, page-size,
+     * and each of the seven tag filters — used to build its own call to
+     * getAllFilteredQuestions, and each one omitted a different subset of the
+     * criteria. Applying a subject filter sent no search text and no channel; running
+     * a search sent no tags; paging sent no search text. So the list, the filter
+     * chips and the pager routinely disagreed about what was being shown, and any
+     * two of the three controls used together produced results matching neither.
+     *
+     * Funnelling all of them through here means the query always carries the full
+     * state, and the state that produced the results is what gets stored alongside
+     * them.
+     */
+    loadQuestions = async ({ tags, searchText, pageNumber, pageSize, isInitialLoad, isStale }) => {
+        const resolvedTags = Array.isArray(tags) ? tags : [];
+        const tagIds = resolvedTags.map((tag) => tag.id);
+        const resolvedSearch = searchText || '';
+        const resolvedPageSize = pageSize || 10;
+        await QuestionsReceiver.getAllFilteredQuestions(
+            resolvedSearch,
+            tagIds,
+            // The channels page links here as `questions?channel_id=<id>`. This page
+            // never read that parameter and always sent an empty channel filter, so
+            // every one of those links silently showed the unfiltered list.
+            this.getChannelIdsFromUrl(),
+            pageNumber,
+            resolvedPageSize
+        ).then(questionsData=>{
+            if (typeof isStale === 'function' && isStale()) {
+                return;
+            }
+            const payload = isInitialLoad
+                ? {
+                    suggestedTags: [],
+                    isTagSearchActive: false,
+                    searchCriteria: "SEARCH_BY_QUESTIONS",
+                }
+                : {...this.props.questionSet};
+            payload.tags = resolvedTags;
+            payload.questions = dataOf(questionsData, EMPTY_PAGE);
+            payload.searchedKey = resolvedSearch;
+            payload.currentPage = pageNumber + 1;
+            payload.currentPageSize = resolvedPageSize;
             this.props.saveQuestionSet(payload);
         });
+    }
 
-        await PaperAPIsConnector.getAllFilteredPapers("",tagIds, []).then(paperData=>{ 
-            let payload = {};
+    loadPapers = async (tags) => {
+        const tagIds = (Array.isArray(tags) ? tags : []).map((tag) => tag.id);
+        await PaperAPIsConnector.getAllFilteredPapers("", tagIds, []).then(paperData=>{
+            let payload = {...(this.props.paperSet || {})};
             payload.tags = tags;
-            payload.suggestedTags = [];
-            payload.isTagSearchActive = false;
-            payload.papers = paperData.data;
-            payload.searchedKey = "";
-            payload.helpSectionEnabled = false;
+            payload.papers = dataOf(paperData, []);
             payload.searchCriteria = "SEARCH_BY_PAPER_NAME";
             this.props.savePaperSet(payload);
         });
-    }  
+    }
+
+    /**
+     * Applies a new set of filter tags. Passed down to the filter toolbar, which
+     * previously ran its own query and wrote only to `generalInfo.selectedTags` —
+     * a second, parallel notion of "applied filters" that never synced with the
+     * `questionSet.tags` this page displays as chips. The toolbar showed one set of
+     * filters, the summary strip showed another, and the results matched whichever
+     * control had been touched last.
+     */
+    applyFilterTags = (tags) => {
+        this.loadQuestions({
+            tags,
+            searchText: (this.props.questionSet || {}).searchedKey,
+            pageNumber: 0,
+            pageSize: (this.props.questionSet || {}).currentPageSize || 10,
+        });
+        this.loadPapers(tags);
+    }
 
     openQuestionEditingViewInNewTab = (questionId) => {
        window.open(currentURLHost + 'question/upsert?question_id=' + questionId)
@@ -133,16 +259,15 @@ class QuestionSet extends React.Component {
     redirectToQuestionsView = () => {
         let generalInfo = {...this.props.generalInfo};
         generalInfo.isViewingQuestions = true;
+        generalInfo.isViewingPapers = false;
         this.props.updateGeneralInfo(generalInfo);
     }
 
     redirectToPapersView = () => {
         let generalInfo = {...this.props.generalInfo};
         generalInfo.isViewingQuestions = false; // False means its paper
+        generalInfo.isViewingPapers = true;
         this.props.updateGeneralInfo(generalInfo);
-
-        let paperSet = {...this.props.paperSet};
-    
     }
     
     /**
@@ -307,21 +432,16 @@ class QuestionSet extends React.Component {
         const currentPage = set.currentPage || 1;
         const first = (currentPage - 1) * pageSize + 1;
         const last = first + page.questions.length - 1;
-        const activeTags = Array.isArray(set.tags) ? set.tags : [];
         const searchedKey = set.searchedKey;
+        // The applied-filter chips used to be duplicated here as well as in the
+        // filter toolbar above, from two different pieces of state that did not stay
+        // in sync — so the two lists of chips regularly disagreed. They now live only
+        // in the toolbar, where they are also removable.
         return <div className='flex items-center justify-between gap-4 flex-wrap px-4 md:px-5 py-3 border-b border-gray-100 bg-gray-50/60'>
             <p className='text-sm text-gray-600'>
                 Showing <span className='font-semibold text-gray-900 tabular-nums'>{first}&ndash;{last}</span>
                 {searchedKey ? <> for <span className='font-semibold text-gray-900'>&ldquo;{searchedKey}&rdquo;</span></> : null}
             </p>
-            {activeTags.length > 0 &&
-                <div className='flex items-center gap-1.5 flex-wrap'>
-                    <span className={typography.label}>Filters</span>
-                    {activeTags.map((tag) => (
-                        <Badge key={tag.id} variant="neutral">{tag.tagName}</Badge>
-                    ))}
-                </div>
-            }
         </div>;
     }
 
@@ -332,6 +452,16 @@ class QuestionSet extends React.Component {
      * the UI should say so.
      */
     getPapersListJSX = () => {
+        // `paperSet` is a separate redux slice filled by a second request, so it is
+        // still undefined while that request is in flight. Reading `.papers` off it
+        // threw and took the whole page down to a blank screen. That was unreachable
+        // until the /papers route started actually selecting this view, because the
+        // question list was always shown instead.
+        if(this.props.paperSet == undefined) {
+            return <div className='flex justify-center py-12'>
+                <ClipLoader color="#2563EB" size={40}/>
+            </div>;
+        }
         if(this.props.paperSet.papers == undefined || this.props.paperSet.papers.length===0) {
             return <div className='py-6'>
                 <EmptyState
@@ -388,26 +518,12 @@ class QuestionSet extends React.Component {
         if(pageNumber == null) {
             updatedPageNumber = this.props.questionSet.currentPage - 1;
         }
-        let tagIds = [];
-        this.props.questionSet.tags.forEach(tag =>{
-            tagIds.push(tag.id);
+        this.loadQuestions({
+            tags: this.props.questionSet.tags,
+            searchText: this.props.questionSet.searchedKey,
+            pageNumber: updatedPageNumber,
+            pageSize: updatedPageSize,
         });
-        QuestionsReceiver.getAllFilteredQuestions(
-            this.props.questionSet.searchedKey,
-             tagIds,
-             // Paging must keep the channel filter, otherwise page 2 of a channel
-             // silently widens to every question on the platform.
-             this.getChannelIdsFromUrl(),
-             updatedPageNumber,
-             updatedPageSize
-        ).then(questionsData=>{
-            let payload = {...this.props.questionSet};
-            payload.questions = questionsData.data;
-            payload.currentPage = updatedPageNumber + 1;
-            payload.currentPageSize = updatedPageSize;
-            this.props.saveQuestionSet(payload);
-        });
-        this.setState({flag : this.state.flag==undefined?true:!this.state.flag}); // Forced re-render
     }
 
     // A `getHelpSectionJSX` used to live here: four YouTube <iframe> embeds titled
@@ -438,7 +554,7 @@ class QuestionSet extends React.Component {
 
     getPagingSection = () => {
         return <PagingSection
-            pageCount = {this.props.questionSet.questions.pageCount}
+            pageCount = {(this.props.questionSet.questions || {}).pageCount}
             currentPageNumber = {this.props.questionSet.currentPage}
             handlePageChange= {this.handlePageChange}
             currentPageSize = {this.props.questionSet.currentPageSize}
@@ -448,13 +564,90 @@ class QuestionSet extends React.Component {
         />
     }
 
+    /**
+     * Live search from the header, called on every keystroke.
+     *
+     * THREE THINGS WERE WRONG
+     * -----------------------
+     * 1. It fired a request per character. Typing "trigonometry" issued twelve
+     *    searches, and because responses can arrive out of order, the list often
+     *    settled on the results for a prefix rather than the full query — the
+     *    displayed results simply did not match the box. Requests are now debounced
+     *    and each response is checked against the latest query before being applied.
+     *
+     * 2. It passed empty tag and channel arrays, so searching silently dropped every
+     *    active filter while the filter chips above the list carried on claiming to
+     *    be applied. Searching within a subject was impossible. The active tags and
+     *    the channel from the URL are now carried through.
+     *
+     * 3. It reset neither the page number nor the page size, so a search run from
+     *    page 4 displayed page-1 results while the pager still read "page 4".
+     */
+    SEARCH_DEBOUNCE_MS = 300;
+
     updateSearchText = () => {
-        QuestionsReceiver.getAllFilteredQuestions(this.props.generalInfo.searchText, [], []).then(questionsData=>{
-            let payload = {...this.props.questionSet};
-            payload.questions = questionsData.data;
-            payload.searchedKey = this.props.generalInfo.searchText;
-            this.props.saveQuestionSet(payload);
+        const searchText = (this.props.generalInfo && this.props.generalInfo.searchText) || '';
+        if (this.searchDebounceTimer != null) {
+            clearTimeout(this.searchDebounceTimer);
+        }
+        this.searchDebounceTimer = setTimeout(() => this.runSearch(searchText), this.SEARCH_DEBOUNCE_MS);
+    }
+
+    runSearch = (searchText) => {
+        this.latestSearchQuery = searchText;
+        const set = this.props.questionSet || {};
+        this.loadQuestions({
+            tags: set.tags,
+            searchText,
+            pageNumber: 0,
+            pageSize: set.currentPageSize || 10,
+            // A slower earlier request must not overwrite a newer one's results.
+            isStale: () => this.latestSearchQuery !== searchText,
         });
+    }
+
+    componentDidMount() {
+        // Both of these used to run from inside render(): initializeQuestions
+        // dispatches redux actions and resetResourceCreationSessionStorage writes to
+        // sessionStorage, so a render was mutating application state. React may call
+        // render more than once for a single commit, which made the number of list
+        // requests on first paint non-deterministic.
+        if (this.props.questionSet === undefined) {
+            this.initializeQuestions();
+        }
+        this.resetResourceCreationSessionStorage();
+        this.applyRouteDefaultView();
+    }
+
+    /**
+     * `/questions` and `/papers` are the same component, and which collection it
+     * showed was decided solely by `generalInfo.isViewingQuestions` — which the
+     * header seeds to `true` unconditionally. So `/papers` rendered the question
+     * list: every link to papers, including the one in the header nav and the
+     * "Browse papers" links on the empty states, landed on questions with no
+     * indication anything had been ignored.
+     *
+     * The route now sets the initial view. Clicking the segmented control still
+     * overrides it, because this runs once on mount.
+     */
+    applyRouteDefaultView = () => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+        const isPapersRoute = window.location.pathname.replace(/\/+$/, '') === '/papers';
+        const generalInfo = {...(this.props.generalInfo || {})};
+        if (generalInfo.isViewingQuestions === !isPapersRoute) {
+            return;
+        }
+        generalInfo.isViewingQuestions = !isPapersRoute;
+        generalInfo.isViewingPapers = isPapersRoute;
+        this.props.updateGeneralInfo(generalInfo);
+    }
+
+    componentWillUnmount() {
+        if (this.searchDebounceTimer != null) {
+            clearTimeout(this.searchDebounceTimer);
+        }
     }
 
     /**
@@ -502,17 +695,15 @@ class QuestionSet extends React.Component {
             return <div/>;
         }
         if(this.props.questionSet === undefined){
-            this.initializeQuestions();
             return <div className='bg-gray-50 min-h-screen'>
                 <EducationalBridgeHeader
                     updateSearchText = {this.updateSearchText}
                 />
                 <div className='flex justify-center py-20'>
-                    <ClipLoader color="#2563EB" size="60"/>
+                    <ClipLoader color="#2563EB" size={60}/>
                 </div>
             </div>
         }
-        this.resetResourceCreationSessionStorage();
         return <div className='bg-gray-50 min-h-screen'>
             <EducationalBridgeHeader
                 updateSearchText = {this.updateSearchText}
@@ -533,7 +724,13 @@ class QuestionSet extends React.Component {
                         {this.getQuestionsTableHeaderJSX()}
                     </div>
                     <div className='mt-4'>
-                        <TagFilterViewLarge/>
+                        {/* The toolbar is told which tags are applied and reports back
+                            when they change, instead of running its own query against
+                            its own copy of the filter state. */}
+                        <TagFilterViewLarge
+                            appliedTags = {this.props.questionSet.tags}
+                            onFiltersChanged = {this.applyFilterTags}
+                        />
                     </div>
                     <PageCard padding="p-0" className="mt-4 overflow-hidden">
                         {this.getQuestionsTableJSX()}

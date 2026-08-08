@@ -1,46 +1,39 @@
-import React from 'react';
-import {currentHost} from '../constants/hostConfig';
-import { logError } from '../utils/logger';
+import { currentHost } from '../constants/hostConfig';
+import { requestJson, postJson } from './httpClient';
 
-class UserAPIConnector extends React.Component  {
+// User API. Resolves with `{data}` on success, `null` on any failure.
 
-    static updateUserDetails = async(userDetails) => {
-        try {
-            let requestBody = {};
-            requestBody.googleId = userDetails.googleId;
-            requestBody.picture = userDetails.imageUrl;
-            requestBody.email = userDetails.email;
-            requestBody.name = userDetails.name;
-            requestBody.familyName = userDetails.familyName;
-            requestBody.givenName = userDetails.givenName;
-            let response = fetch(currentHost + 'user/login/details', {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(requestBody)
-                }
-            );
-            return "updated";
-        } catch (e) {
-            logError('UserAPIConnector.updateUserDetails', e);
+const encode = (value) => encodeURIComponent(value === null || value === undefined ? '' : value);
+
+class UserAPIConnector {
+
+    /**
+     * Record the signed-in user server-side.
+     *
+     * The fetch was previously not awaited and the method returned "updated"
+     * regardless, so a failure here was invisible and produced an unhandled
+     * promise rejection. Sign-in deliberately does not block on this — the
+     * session is already stored locally by the caller — but the request is now
+     * awaited so a failure is logged rather than lost.
+     */
+    static updateUserDetails = async (userDetails) => {
+        if (userDetails === null || userDetails === undefined) {
             return null;
         }
+        return postJson('UserAPIConnector.updateUserDetails', currentHost + 'user/login/details', {
+            googleId: userDetails.googleId,
+            picture: userDetails.imageUrl,
+            email: userDetails.email,
+            name: userDetails.name,
+            familyName: userDetails.familyName,
+            givenName: userDetails.givenName,
+        });
     }
-    static getSuggestedUsers = async(userKey) => {
-        try {
-            const response = await fetch(
-                currentHost + '/suggestion/users?search_key='+userKey+'&start_index=0&page_size=100'
-            );
-            let data = await response.json();
-            return {data};
-        }
-        catch (e) {
-            logError('UserAPIConnector.getSuggestedUsers', e);
-            return null;
-        }
-    }   
+
+    static getSuggestedUsers = async (userKey) => requestJson(
+        'UserAPIConnector.getSuggestedUsers',
+        currentHost + 'suggestion/users?search_key=' + encode(userKey) + '&start_index=0&page_size=100'
+    )
 
 }
 

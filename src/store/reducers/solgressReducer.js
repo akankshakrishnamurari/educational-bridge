@@ -3,14 +3,19 @@ import produce from "immer";
 
 const initialState = getInitialState();
 
+// Two cases used to sit at the top of this switch and both are now gone, along
+// with the unused thunk action creators that were the only things that could
+// have dispatched them:
+//
+//   'SIMPLE_ACTION'    returned `{ result: action.payload }` — note it replaced
+//                      the WHOLE state object rather than producing a draft, so
+//                      one dispatch would have wiped every slice in the store
+//                      (user details, question set, paper details, all of it).
+//   'INITIALIZE_STATE' returned `initialState`, the shared object read at module
+//                      load, so any later immer draft would have mutated the
+//                      same reference the reducer falls back to.
 const SolgressReduxState = (currentState = initialState, action) => {
   switch (action.type) {
-    case 'SIMPLE_ACTION':
-      return {
-        result: action.payload
-      }
-    case 'INITIALIZE_STATE' :
-      return initialState;
     case 'SAVE_SPEAKER_DETAILS': {
       return produce(currentState, (draftState) => {
         draftState.speakerDetails = action.payload;
