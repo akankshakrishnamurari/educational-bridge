@@ -16,7 +16,7 @@ export const contributors = [
         name: 'Akanksha Kumari',
         role: 'Founder & Lead',
         lead: true,
-        image: null,
+        image: '/contributors/akanksha.jpg',
         headline: 'Software Development Analyst at Accenture',
         credentials: 'MTech, Data Science & Engineering — BITS Pilani',
         bio: 'Akanksha started EducationalBridge because she needed it and it did not exist. '
