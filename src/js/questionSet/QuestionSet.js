@@ -16,7 +16,7 @@ import PagingSection from '../adminPortal/platformCapabilities/PagingSection';
 import PageCard from '../../components/common/Card';
 import Badge from '../../components/common/Badge';
 import EmptyState from '../../components/common/EmptyState';
-import AdRail from '../../components/common/AdRail';
+import Footer from '../../components/common/Footer';
 import QuestionListItem from '../../components/questionSet/QuestionListItem';
 import { typography, layout } from '../../constants/designTokens';
 
@@ -238,7 +238,7 @@ class QuestionSet extends React.Component {
                             className="rounded-full w-5 h-5"
                             src={createdByPicture}
                             alt={createdByDisplayName}
-                            referrerpolicy="no-referrer"
+                            referrerPolicy="no-referrer"
                         />
                     }
                     <span className='text-xs text-gray-500'>{createdByDisplayName}</span>
@@ -410,41 +410,12 @@ class QuestionSet extends React.Component {
         this.setState({flag : this.state.flag==undefined?true:!this.state.flag}); // Forced re-render
     }
 
-    updateHelpSectionEnabling = (event) => {
-        let payload = {...this.props.questionSet};
-        payload.helpSectionEnabled = event.target.checked;
-        this.props.saveQuestionSet(payload);
-    }
-
-    getHelpSectionJSX = () => {
-        if(this.props.questionSet.helpSectionEnabled === false) {
-            return <div/>;
-        }
-        return <div>
-            <div className="bg-success-50 py-2">
-                <h3 className ='text-xl'>
-                    Help Section
-                </h3>
-            </div>
-            <p className='text-lg py-2'>
-                1. How to create a multiple choice question on educationalbridge ?
-            </p>
-            <iframe width="420" height="345" src="https://www.youtube.com/embed/y7169jEvb-Y" className='w-full'/>
-            <p className='text-lg py-2'>
-                2. What does preview means here ?
-            </p>
-            <iframe width="420" height="345" src="https://www.youtube.com/embed/e_TxH59MclA" className='w-full'/>
-
-            <p className='text-lg py-2'>
-                3. How to add images into the questions ?
-            </p>
-            <iframe width="420" height="345" src="https://www.youtube.com/embed/bVKHRtafgPc" className='w-full'/>
-            <p className='text-lg py-2'>
-                3. What is educationalbridge ?
-            </p>
-            <iframe width="420" height="345" src="https://www.youtube.com/embed/hQ8GYk9gkcE" className='w-full'/>
-        </div>;
-    }
+    // A `getHelpSectionJSX` used to live here: four YouTube <iframe> embeds titled
+    // "How to create a multiple choice question on educationalbridge ?" and
+    // "What is educationalbridge ?", gated on a `helpSectionEnabled` flag. It had no
+    // call site, so it never rendered, and it would have loaded third-party
+    // tracking iframes onto the main content page if it had. Removed along with its
+    // toggle handler.
 
     handlePageChange = (event, value) => {
         // Guard read the wrong path (questionSet.pageCount is undefined; the count
@@ -546,15 +517,11 @@ class QuestionSet extends React.Component {
             <EducationalBridgeHeader
                 updateSearchText = {this.updateSearchText}
             />
-            {/* Same layout.container as the header, so the content column's left edge
-                lines up with the wordmark. Rails are fixed-width; the content column
-                flexes to fill whatever is left rather than being capped, which is what
-                lets the list use the full width on a large display. */}
-            <div className={layout.container + ' py-8 flex gap-6 items-start'}>
-                <AdRail />
-                {/* Content column stays free of ad units - advertising lives only in
-                    the left/right rails. */}
-                <div className="flex-1 min-w-0">
+            {/* Single content column at the shared container width, lining up with
+                the header wordmark. The flex row that used to sit here existed only
+                to hold an advertising rail either side of the content. */}
+            <div className={layout.container + ' py-8'}>
+                <div className="min-w-0">
                     {this.getPageHeadingJSX()}
                     {/* Segmented control sits directly under the heading, then the
                         tag filters, then the list. Previously the tabs were welded
@@ -575,8 +542,8 @@ class QuestionSet extends React.Component {
                         {this.getPagingSection()}
                     </div>
                 </div>
-                <AdRail />
             </div>
+            <Footer />
         </div>;
     }
 }

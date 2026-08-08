@@ -211,14 +211,14 @@ class QuestionSetSearchBoxComponent extends React.Component {
     }
 
     getSearchBoxJSX = () => {
-        return <div class=" px-w-full flex flex-col sm:flex-row flex-nowrap sm:flex-wrap xl:flex-nowrap justify-center items-center py-1 lg:py-2 px-1 lg:px-5">
+        return <div className=" px-w-full flex flex-col sm:flex-row flex-nowrap sm:flex-wrap xl:flex-nowrap justify-center items-center py-1 lg:py-2 px-1 lg:px-5">
             <div className='flex flex-col relative sm:w-8/12 md:w-9/12 xl:w-7/12 2xl:6/12 px-3'
                 onMouseLeave={()=>this.deactivateSearch()} onMouseEnter={()=>this.activateSearch()}
             >
                 <input 
                     type="text" 
                     className = {searchBoxCSS + " px-4"}
-                    placeholder="Search here ..."
+                    placeholder="Search questions"
                     onChange={(event)=>this.updateSearchedKey(event)}
                 />
                 <div className='w-full'>
@@ -231,7 +231,7 @@ class QuestionSetSearchBoxComponent extends React.Component {
                 <button className={buttonBesideSearchBoxCSS}
                     onClick={() => window.location.href = currentURLHost + 'question/upsert'}
                 >
-                    <p className={generalTextSize + " font-semi-bold ..."}>
+                    <p className={generalTextSize + " font-semi-bold"}>
                         Add New Question
                     </p>
                 </button>

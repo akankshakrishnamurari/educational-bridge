@@ -18,6 +18,7 @@ import SingleSelectMCQPreview from "../previews/SingleSelectMCQPreview";
 import EducationalBridgePopupBox from '../../coreCapabilities/EducationalBridgePopupBox';
 import { generalTextSize, clickableSearchTableBodyCellTextCSS, nonClickableSearchTableBodyCellTextCSS } from '../../../constants/TextSizeConstants';
 import QuestionSetSearchBoxComponent from './../../questionSet/QuestionSetSearchBoxComponent';
+import notify from '../../../utils/notify';
 import {currentURLHost} from './../../../constants/hostConfig';
 import Pagination from '@material-ui/lab/Pagination';
 import { AiFillSetting } from "react-icons/ai";
@@ -126,17 +127,17 @@ class QuestionSelectionConfigurationBox extends React.Component {
         }
         return <TableRow className = 'bg-gray-100'>
             <TableCell className='border border-slate-300'>
-                <p className={generalTextSize + " text-left font-bold flex justify-center ..."}>
+                <p className={generalTextSize + " text-left font-bold flex justify-center"}>
                     Select
                 </p>
             </TableCell>
             <TableCell className='border border-slate-300'>
-                <p className={generalTextSize + " font-bold flex justify-center ..."}>
+                <p className={generalTextSize + " font-bold flex justify-center"}>
                     View
                 </p>
             </TableCell>
             <TableCell className='border border-slate-300'>
-                <p className={generalTextSize + " text-left font-bold pl-10 ..."}>
+                <p className={generalTextSize + " text-left font-bold pl-10"}>
                     {questionHeaderText}
                 </p>
             </TableCell>
@@ -155,8 +156,8 @@ class QuestionSelectionConfigurationBox extends React.Component {
                 </span>
                 )
         });
-        return <div className='flex flex-row ...'>
-            <div className='flex justify-top ...'>
+        return <div className='flex flex-row'>
+            <div className='flex justify-top'>
                 <span className='px-2'><AiFillTags size={15} color = {'blue'}/></span>
             </div>
             <div className=''>
@@ -182,7 +183,9 @@ class QuestionSelectionConfigurationBox extends React.Component {
             return;
         }
         else if(this.props.newPaperDetails.selectedQuestionIds.length >= this.props.newPaperDetails.numberOfQuestions) {
-            alert("Maximum question reached");
+            notify.warning("This paper already has all "
+                + this.props.newPaperDetails.numberOfQuestions
+                + " questions. Remove one before adding another.");
             return;
         }
         let payload = {...this.props.newPaperDetails}
@@ -209,7 +212,8 @@ class QuestionSelectionConfigurationBox extends React.Component {
         }
         let sectionSpecificSelectedQuestion = [...subjectWiseSectionWiseSelectedQuestions[subjectName][sectionName]];
         if(sectionSpecificSelectedQuestion.length === this.props.newPaperDetails.subjectWiseSectionWiseNumberOfQuestions[currentSubjectIndex][currentSectionIndex]) {
-            alert("Maximum question reached for the section");
+            notify.warning(subjectName + " \u00b7 " + sectionName
+                + " is already full. Remove a question from it before adding another.");
             return;
         }
         let subjectSpecificSelectedQuestions = {...subjectWiseSectionWiseSelectedQuestions[subjectName]};
@@ -287,7 +291,7 @@ class QuestionSelectionConfigurationBox extends React.Component {
                                 markAsUnselected = {this.unSelectQuestionId}
                                 identifier = {question.id}
                             />
-                            <div className='flex justify-center py-1 ...' 
+                            <div className='flex justify-center py-1' 
                                     onMouseLeave={()=>this.deactivateQuestionViewPopup(question.id)} 
                                     onMouseEnter={()=>this.activateQuestionViewPopup(question.id)}
                                     onMouseClick={()=>this.activateQuestionViewPopup(question.id)}
@@ -300,9 +304,9 @@ class QuestionSelectionConfigurationBox extends React.Component {
                             </div>
                         </div>
                         <div className='flex flex-row w-full' >
-                            <div className="flex flex-col w-full ..." onClick = {()=>this.flipQuestionSelection(question.id)}>
+                            <div className="flex flex-col w-full" onClick = {()=>this.flipQuestionSelection(question.id)}>
                                 <div className='w-full'>
-                                    <p className={ nonClickableSearchTableBodyCellTextCSS + generalTextSize + "  w-full text-left text-black ..."}>
+                                    <p className={ nonClickableSearchTableBodyCellTextCSS + generalTextSize + "  w-full text-left text-black"}>
                                         <div dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(question.description.substring(0,200))}}></div>
                                     </p>
                                 </div>

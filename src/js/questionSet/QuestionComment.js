@@ -42,7 +42,7 @@ class QuestionComment extends React.Component {
                                     className="rounded-full w-6 h-6"
                                     src={createdByPicture}
                                     alt={createdByUserName}
-                                    referrerpolicy="no-referrer"
+                                    referrerPolicy="no-referrer"
                                 />
                             }
                             <span className='text-sm text-gray-700'>{createdByUserName}</span>
@@ -115,7 +115,7 @@ class QuestionComment extends React.Component {
                             className="rounded-full w-7 h-7 shrink-0" 
                             src={reply.avatarUrl}
                             alt={reply.userName || ''}
-                            referrerpolicy="no-referrer"    
+                            referrerPolicy="no-referrer"    
                         />
                         <div className='px-3 grow'>
                             {this.getCommentReplyJSX(reply, commentIndex, replyIndex)}
@@ -204,7 +204,7 @@ class QuestionComment extends React.Component {
                     className="rounded-full w-8 h-8 shrink-0" 
                     src={comment.avatarUrl}
                     alt={comment.userName || ''}
-                    referrerpolicy="no-referrer"    
+                    referrerPolicy="no-referrer"    
                 />
                 <div className='px-3 grow'>
                     {this.getCommentDetailJSX(comment, index)}

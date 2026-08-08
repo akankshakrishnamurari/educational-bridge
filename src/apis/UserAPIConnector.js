@@ -1,5 +1,6 @@
 import React from 'react';
 import {currentHost} from '../constants/hostConfig';
+import { logError } from '../utils/logger';
 
 class UserAPIConnector extends React.Component  {
 
@@ -23,7 +24,7 @@ class UserAPIConnector extends React.Component  {
             );
             return "updated";
         } catch (e) {
-            console.log(e);
+            logError('UserAPIConnector.updateUserDetails', e);
             return null;
         }
     }
@@ -36,7 +37,7 @@ class UserAPIConnector extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('UserAPIConnector.getSuggestedUsers', e);
             return null;
         }
     }   

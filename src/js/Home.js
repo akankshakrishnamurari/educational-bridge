@@ -9,6 +9,7 @@ import QuestionsReceiver from '../apis/QuestionsReceiver';
 import ChannelReceiver from '../apis/ChannelReceiver';
 import Avatar from '../components/common/Avatar';
 import { contributors } from '../constants/contributors';
+import Footer from '../components/common/Footer';
 import { HiOutlineAcademicCap, HiOutlineSparkles, HiOutlineHeart } from 'react-icons/hi';
 import { BsPencilSquare, BsCollectionPlay, BsFileEarmarkText } from 'react-icons/bs';
 import {
@@ -24,15 +25,14 @@ import {
 // about eight seconds: teaching already scaled to the whole internet, testing
 // never did, and this is where that gap gets closed.
 //
-// Two deliberate departures from the rest of the app:
+// One deliberate departure from the rest of the app: this page uses
+// layout.marketing (1152px) rather than layout.container (1280px), because it is
+// built from full-bleed bands and grids rather than a single content column, and
+// the tighter measure keeps the prose from running too wide inside those bands.
 //
-//  1. Width. Content pages use layout.container (1800px) because they carry two
-//     300px ad rails. A landing page with no rails at that width has prose
-//     running the full monitor with a 32px gutter, which reads as unfinished.
-//     This page uses layout.marketing (1152px) so there is real space either
-//     side. The header keeps its own full width, so the two are intentionally
-//     different and that is fine.
-//  2. No ad rails. This is the marketing surface, not a content surface.
+// (Historically the note here also explained that content pages were 1800px to
+// accommodate two 300px advertising rails. There is no advertising in the app any
+// more and the container is now 1280px, so that distinction is gone.)
 //
 // The sample question in the hero is written by hand on purpose. The real
 // question bank is licensed third-party content and robots.txt deliberately
@@ -740,6 +740,7 @@ class Home extends React.Component {
                 {this.getMissionSection()}
                 {this.getContributorsSection()}
                 {this.getFinalCtaSection()}
+                <Footer />
             </div>
         );
     }

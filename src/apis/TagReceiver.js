@@ -1,5 +1,6 @@
 import React from 'react';
 import {currentHost} from './../constants/hostConfig';
+import { logError } from '../utils/logger';
 
 class TagReceiver extends React.Component  {
 
@@ -12,7 +13,7 @@ class TagReceiver extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('TagReceiver.getSuggestedTags', e);
             return null;
         }
     }   
@@ -26,7 +27,7 @@ class TagReceiver extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('TagReceiver.getUserResourceCreationTag', e);
             return null;
         }
     }
@@ -43,7 +44,7 @@ class TagReceiver extends React.Component  {
             );
             return "updated";
         } catch (e) {
-            console.log(e);
+            logError('TagReceiver.upsertNewTag', e);
             return null;
         }
     }

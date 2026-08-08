@@ -2,6 +2,7 @@
 
 import React from 'react';
 import {currentHost} from './../constants/hostConfig';
+import { logError } from '../utils/logger';
 
 
 class PaperAPIsConnector extends React.Component  {
@@ -19,7 +20,7 @@ class PaperAPIsConnector extends React.Component  {
             let data = await response;
             return "updated";
         } catch (e) {
-            console.log(e);
+            logError('PaperAPIsConnector.createNewPaper', e);
             return null;
         }
     }
@@ -46,7 +47,7 @@ class PaperAPIsConnector extends React.Component  {
             let data = await response.json();
             return {data};
         } catch (e) {
-            console.log(e);
+            logError('PaperAPIsConnector.submitPaper', e);
             return null;
         }
     }
@@ -63,7 +64,7 @@ class PaperAPIsConnector extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('PaperAPIsConnector.getAllFilteredPapers', e);
             return null;
         }
     }
@@ -75,7 +76,7 @@ class PaperAPIsConnector extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('PaperAPIsConnector.getUserSubmmittedPapersSummary', e);
             return null;
         }
     }
@@ -88,7 +89,7 @@ class PaperAPIsConnector extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('PaperAPIsConnector.getPaperDetails', e);
             return null;
         }
     }
@@ -100,7 +101,7 @@ class PaperAPIsConnector extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('PaperAPIsConnector.getSubmittedPaperDetails', e);
             return null;
         }
     }

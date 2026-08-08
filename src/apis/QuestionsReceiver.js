@@ -3,6 +3,7 @@ import React from 'react';
 import {currentHost} from './../constants/hostConfig';
 import { CatchingPokemon } from "@mui/icons-material";
 import { UserDetailsUtil } from "../utils/UserDetailsUtil";
+import { logError } from '../utils/logger';
 
 const mapDispatchToProps = dispatch => ({
     savePaperDetails: (payload) => dispatch(savePaperDetails(payload))
@@ -24,7 +25,7 @@ class QuestionsReceiver extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('QuestionsReceiver.getQuestions', e);
             return null;
         }
     }
@@ -44,7 +45,7 @@ class QuestionsReceiver extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('QuestionsReceiver.getAllFilteredQuestions', e);
             return {};
         }
     }
@@ -62,7 +63,7 @@ class QuestionsReceiver extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('QuestionsReceiver.getQuestionsByQuestionIds', e);
             return {};
         }
     }
@@ -74,7 +75,7 @@ class QuestionsReceiver extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('QuestionsReceiver.getQuestion', e);
             return null;
         }
     }
@@ -86,7 +87,7 @@ class QuestionsReceiver extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('QuestionsReceiver.getSubmittedQuestion', e);
             return null;
         }
     }
@@ -111,7 +112,7 @@ class QuestionsReceiver extends React.Component  {
             return {data};
         }
         catch(e) {
-            console.log(e);
+            logError('QuestionsReceiver.submitQuestionResponse', e);
             return null;
         }
     }
@@ -130,7 +131,7 @@ class QuestionsReceiver extends React.Component  {
             let data = await response.json();
             return {data};
         } catch (e) {
-            console.log(e);
+            logError('QuestionsReceiver.upsertQuestion', e);
             return null;
         }
     }
@@ -142,7 +143,7 @@ class QuestionsReceiver extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('QuestionsReceiver.getUserSubmmittedQuestionsSummary', e);
             return null;
         }
     }
@@ -153,7 +154,7 @@ class QuestionsReceiver extends React.Component  {
             let data = await response.json();
             return {data};
         } catch(e) {
-            console.log(e);
+            logError('QuestionsReceiver.getQuestionComment', e);
             return {};
         }
     }
@@ -199,7 +200,7 @@ class QuestionsReceiver extends React.Component  {
             );
             return "updated";
         } catch (e) {
-            console.log(e);
+            logError('QuestionsReceiver.updateQuestionComments', e);
             return null;
         }
     }
@@ -210,7 +211,7 @@ class QuestionsReceiver extends React.Component  {
             let data = await response.json();
             return {data};
         } catch(e) {
-            console.log(e);
+            logError('QuestionsReceiver.upvoteQuestion', e);
             return {};
         }
     }
@@ -221,7 +222,7 @@ class QuestionsReceiver extends React.Component  {
             let data = await response.json();
             return {data};
         } catch(e) {
-            console.log(e);
+            logError('QuestionsReceiver.downvoteQuestion', e);
             return {};
         }
     }
@@ -232,7 +233,7 @@ class QuestionsReceiver extends React.Component  {
             let data = await response.json();
             return {data};
         } catch(e) {
-            console.log(e);
+            logError('QuestionsReceiver.getQuestionVoting', e);
             return {};
         }
     }
@@ -244,7 +245,7 @@ class QuestionsReceiver extends React.Component  {
             let data = await response.json();
             return {data};
         } catch(e) {
-            console.log(e);
+            logError('QuestionsReceiver.upvoteQuestionComment', e);
             return {};
         }
     }
@@ -256,7 +257,7 @@ class QuestionsReceiver extends React.Component  {
             let data = await response.json();
             return {data};
         } catch(e) {
-            console.log(e);
+            logError('QuestionsReceiver.downvoteQuestionComment', e);
             return {};
         }
     }
@@ -268,7 +269,7 @@ class QuestionsReceiver extends React.Component  {
             let data = await response.json();
             return {data};
         } catch(e) {
-            console.log(e);
+            logError('QuestionsReceiver.getNextRecommendedQuestion', e);
             return {};
         }   
     }

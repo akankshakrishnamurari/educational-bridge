@@ -13,6 +13,7 @@ import EducationalBridgePopupBox from '../../coreCapabilities/EducationalBridgeP
 import TagFilterViewSmall from '../../questionSet/TagFilter/TagFilterViewSmall';
 import {BsArrowLeft, BsClipboardPlus} from "react-icons/bs";
 import {FcGoogle} from "react-icons/fc"
+import notify from '../../../utils/notify';
 
 const mapDispatchToProps = dispatch => ({
     saveUserDetails: (payload) => dispatch(saveUserDetails(payload)),
@@ -53,8 +54,10 @@ class EducationalBridgeHeaderSmallScreen extends React.Component {
         this.props.saveUserDetails(response.profileObj);
     }
 
-    handleGoogleLoginFailureResponse = (response) => {
-        console.log("response from login failed");
+    handleGoogleLoginFailureResponse = () => {
+        // This previously only wrote to the console, so a failed sign-in looked to the
+        // visitor like nothing had happened at all.
+        notify.error("We couldn't sign you in with Google. Please try again.");
     }
 
     handleGoogleLogoutResponse = () => {
@@ -169,11 +172,19 @@ class EducationalBridgeHeaderSmallScreen extends React.Component {
                   )}
                   onClickOutside = {() => this.toggleLoginPopOver()}  
             >
-            <img class="rounded-full w-9 h-9 " 
-                src={JSON.parse(window.sessionStorage.getItem("userDetails")).imageUrl}
-                referrerpolicy="no-referrer"
+            {/* The click handler used to sit on the <img> itself, so the account menu
+                could only be opened with a pointer — it was not reachable by keyboard
+                or to a screen reader. */}
+            <button
                 onClick={() => this.toggleLoginPopOver()}
-            />
+                aria-label="Open your account menu"
+            >
+                <img className="rounded-full w-9 h-9 "
+                    src={JSON.parse(window.sessionStorage.getItem("userDetails")).imageUrl}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                />
+            </button>
           </Popover>;
         }
     }
@@ -248,7 +259,7 @@ class EducationalBridgeHeaderSmallScreen extends React.Component {
                                 <input 
                                     type="text" 
                                     className = { searchBoxInputCSS + " w-full focus:outline-none rounded"}
-                                    placeholder="Search here..."
+                                    placeholder="Search questions and papers"
                                     value={this.props.generalInfo==null ||this.props.generalInfo.searchText==null ? "": this.props.generalInfo.searchText}
                                     onChange={(event) => this.updateSearchText(event)}
                                 />

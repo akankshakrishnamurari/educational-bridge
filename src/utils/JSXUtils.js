@@ -6,7 +6,7 @@ export class JSXUtils {
 
     static getQuestionRenderingJSX(questionText) {
         return <div>
-            <p className="text-xl text-left pl-10 border border-slate-200 ...">
+            <p className="text-xl text-left pl-10 border border-slate-200">
                 <div dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(questionText)}}></div>
             </p>
         </div>;
@@ -14,7 +14,7 @@ export class JSXUtils {
 
     static getQuestionOptionRenderingJSX(optionNumber, optionText) {
         return <button className="flex mx-2 my-2 bg-white transition-colors rounded text-gray-700 border border-gray-300 px-6 py-2 text-xs hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-            <div className="flex flex-row ...">
+            <div className="flex flex-row">
                 <div>
                     <p className={generalTextSize + " px-2"}>
                         {optionNumber} :
@@ -116,7 +116,7 @@ export class JSXUtils {
             <div
                 className={"flex flex-col lg:flex-row w-full items-start rounded shadow py-2 bg-" + color + " border"+ color}>
                 <div className={"flex flex-row w-full  lg:w-12/12 "+  color}>
-                    <div className="text-xs sm:text-base md:text-lg xl:text-xl  ...">
+                    <div className="text-xs sm:text-base md:text-lg xl:text-xl">
                         Question Number : {questionNumber}
                     </div>
                     {this.getRemainingTimeBlock()}

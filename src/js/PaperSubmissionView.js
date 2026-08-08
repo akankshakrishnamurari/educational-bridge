@@ -8,6 +8,7 @@ import {currentURLHost} from './../constants/hostConfig';
 import EducationalBridgeHeader from './../js/header/EducationalBridgeHeader';
 import ClipLoader from "react-spinners/ClipLoader";
 import StatTile from '../components/common/StatTile';
+import Footer from '../components/common/Footer';
 import MeterBar from '../components/common/MeterBar';
 import MathContent from '../components/common/MathContent';
 import { typography, layout } from '../constants/designTokens';
@@ -444,8 +445,8 @@ class PaperSubmissionView extends React.Component {
         return (
             <div className='bg-gray-50 min-h-screen'>
                 <EducationalBridgeHeader/>
-                <div className={layout.container + ' py-6 md:py-8'}>
-                    <div className="max-w-3xl mx-auto">
+                <div className={layout.wideReading + ' py-6 md:py-8'}>
+                    <div>
                         {this.getHeroJSX()}
                         {this.getTimeAnalysisJSX()}
                         {this.getComparisonJSX()}
@@ -453,6 +454,7 @@ class PaperSubmissionView extends React.Component {
                         {this.getQuestionIndexJSX()}
                     </div>
                 </div>
+                <Footer />
             </div>
         );
     }

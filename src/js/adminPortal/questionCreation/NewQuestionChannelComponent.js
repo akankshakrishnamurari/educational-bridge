@@ -102,7 +102,7 @@ class NewQuestionChannelComponent extends React.Component {
             <button className=" my-1 transition-colors rounded border border-gray-300 py-2 text-xs bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                 onClick={() => window.open(currentURLHost + 'channel/new')}
             >
-                <p className="text-lg px-2 ...">
+                <p className="text-lg px-2">
                     Create New Channel
                 </p>
             </button>
@@ -140,10 +140,10 @@ class NewQuestionChannelComponent extends React.Component {
                                 Channel :
                             </p>
                         </div> */}
-                        {/* <div class="w-6/12" onMouseLeave={()=>this.deactivateChannelSearch()} onMouseEnter={()=>this.activateChannelSearch()}>
+                        {/* <div className="w-6/12" onMouseLeave={()=>this.deactivateChannelSearch()} onMouseEnter={()=>this.activateChannelSearch()}>
                             <input 
                                 type="text" 
-                                class=" bg-gray-200 h-10 w-full pr-8 pl-5 rounded z-0 focus:shadow focus:outline-none" 
+                                className=" bg-gray-200 h-10 w-full pr-8 pl-5 rounded z-0 focus:shadow focus:outline-none" 
                                 placeholder="Search and add channels..."
                                 value = {
                                     (this.props.newQuestionDetails.selectedChannel===undefined)

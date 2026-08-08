@@ -13,7 +13,7 @@ class PagingSection extends React.Component {
 
     getPageSettingPopupDiv = () => {
         let popupContent = <div className ='bg-gray-100 border-2 border-primary-400 z-50 px-2'>
-                <div className='flex flex-row py-1 ...'>
+                <div className='flex flex-row py-1'>
                     <div className={'text-gray-600 px-2' + generalTextSize}>
                         Page Number : 
                     </div>
@@ -28,7 +28,7 @@ class PagingSection extends React.Component {
                         />
                     </div>
                 </div>
-                <div className='flex flex-row py-1 justify-left ...'>
+                <div className='flex flex-row py-1 justify-left'>
                     <div className={'text-gray-600 px-2' + generalTextSize}>
                         Page Size : 
                     </div>
@@ -73,7 +73,7 @@ class PagingSection extends React.Component {
     }
 
     render() {
-        return <div className='flex flex-row flex justify-center ...'>
+        return <div className='flex flex-row flex justify-center'>
                 <div className='px-4'>
                     <Pagination 
                         className = " text-xs md:text-sm xl:text-lg py-4 " 

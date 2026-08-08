@@ -1,5 +1,6 @@
 import React from 'react';
 import {currentHost} from './../constants/hostConfig'
+import { logError } from '../utils/logger';
 
 class ChannelReceiver extends React.Component  {
 
@@ -12,7 +13,7 @@ class ChannelReceiver extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('ChannelReceiver.getSuggestedChannels', e);
             return null;
         }
     }
@@ -26,7 +27,7 @@ class ChannelReceiver extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('ChannelReceiver.getAllChannelsSummary', e);
             return null;
         }
     }
@@ -40,7 +41,7 @@ class ChannelReceiver extends React.Component  {
             return {data};
         }
         catch (e) {
-            console.log(e);
+            logError('ChannelReceiver.getChannelDetails', e);
             return null;
         }
     }
@@ -73,7 +74,7 @@ class ChannelReceiver extends React.Component  {
             }
             return "updated";
         } catch (e) {
-            console.log(e);
+            logError('ChannelReceiver.upsertChannel', e);
             return null;
         }
     }

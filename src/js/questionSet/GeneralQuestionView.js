@@ -11,7 +11,6 @@ import EducationalBridgeHeader from '../header/EducationalBridgeHeader';
 import ClipLoader from "react-spinners/ClipLoader";
 import notify from '../../utils/notify';
 import Button from '../../components/common/Button';
-import AdRail from '../../components/common/AdRail';
 import Badge from '../../components/common/Badge';
 import DifficultyMeter from '../../components/common/DifficultyMeter';
 import { layout } from '../../constants/designTokens';
@@ -389,12 +388,11 @@ class GeneralQuestionView extends React.Component {
             </Helmet>
             <div className="bg-gray-50 min-h-screen pb-24">
                 <EducationalBridgeHeader/>
-                <div className={layout.container + " py-6 md:py-8 flex gap-6 items-start"}>
-                <AdRail />
-                {/* Reading-width column. Solving is a focused, single-task activity,
-                    so the content is capped for legibility rather than filling the
-                    1800px shell the list page uses. */}
-                <div className="flex-1 min-w-0 max-w-3xl mx-auto">
+                {/* Reading width. Solving is a focused, single-task activity, so the
+                    column is capped for legibility rather than filling the wider
+                    container the list page uses. */}
+                <div className={layout.reading + " py-6 md:py-8"}>
+                <div className="min-w-0">
                     {this.getQuestionHeaderJSX()}
 
                     {/* Surface 1: the problem. Previously the question, the options,
@@ -427,7 +425,6 @@ class GeneralQuestionView extends React.Component {
                         />
                     </div>
                 </div>
-                <AdRail />
                 </div>
                 {this.getActionBarJSX()}
             </div>

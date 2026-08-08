@@ -26,7 +26,7 @@ class TagsFilterView extends React.Component {
 
     // getAuthorNameJSX = () => {
     //     return <div>
-    //         <div className='flex flex-row ...'>
+    //         <div className='flex flex-row'>
     //             <div className={generalTextSize + " px-2 "}>
     //                 Author Name : 
     //             </div>

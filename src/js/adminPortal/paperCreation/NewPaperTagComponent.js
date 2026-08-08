@@ -122,7 +122,7 @@ class NewPaperTagComponent extends React.Component {
         response.push(
             <button className={" my-1 transition-colors rounded border border-gray-300 py-2 bg-white text-gray-700 hover:bg-gray-50 " + generalTextSize  + " focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"}
                 onClick={() => window.open(currentURLHost + 'tags/new')}>
-                <p className={generalTextSize + " px-2 ..."}>
+                <p className={generalTextSize + " px-2"}>
                     Request New Tag
                 </p>
             </button>
@@ -157,7 +157,7 @@ class NewPaperTagComponent extends React.Component {
         );
         this.props.newPaperDetails.tags.forEach(element => {
             response.push(
-                <div className="flex flex-row ...">
+                <div className="flex flex-row">
                     <div className="py-2 ">{JSXUtils.getTagViewJSX(element.tagName)}</div>
                     <div className="px-1 pr-3" onClick={()=>this.removeTag(element.id)}>
                         <div className={"flex my-2 transition-colors rounded bg-gray-100 border border-gray-300 py-2 text-gray-600 " + generalTextSize + " hover:bg-danger-50 hover:text-danger-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-danger-500"}>
@@ -185,22 +185,22 @@ class NewPaperTagComponent extends React.Component {
         }
         return (
             <div className="w-full pb-2">
-                <div className="flex flex-row ...">
+                <div className="flex flex-row">
                     {this.showSelectedTags()}
                 </div>
                 {/* <div className="bg-gray-50">
                     <div className="flex flex-col pt-4 ">
-                        <div className="flex flex-row ...">
+                        <div className="flex flex-row">
                             <div>
                                 <p className="px-6  py-2 text-base leading-tight text-gray-800 ">
                                     Tags:
                                 </p>
                             </div>
-                            <div class=" flex justify-center items-center">
-                                <div class="relative" onMouseLeave={()=>this.deactivateTagSearch()} onMouseEnter={()=>this.activateTagSearch()}>
+                            <div className=" flex justify-center items-center">
+                                <div className="relative" onMouseLeave={()=>this.deactivateTagSearch()} onMouseEnter={()=>this.activateTagSearch()}>
                                     <input 
                                         type="text" 
-                                        class="resize  bg-gray-200 h-10 w-full pr-8 pl-5 rounded z-0 focus:shadow focus:outline-none" 
+                                        className="resize  bg-gray-200 h-10 w-full pr-8 pl-5 rounded z-0 focus:shadow focus:outline-none" 
                                         placeholder="Search and add tags..."
                                         onChange={(event)=>this.updateSearchedTagKey(event)}
                                     />
@@ -219,10 +219,10 @@ class NewPaperTagComponent extends React.Component {
                                 Tags :
                             </p>
                         </div>
-                        <div class="w-full md:w-4/12" onMouseLeave={()=>this.deactivateTagSearch()} onMouseEnter={()=>this.activateTagSearch()}>
+                        <div className="w-full md:w-4/12" onMouseLeave={()=>this.deactivateTagSearch()} onMouseEnter={()=>this.activateTagSearch()}>
                             <input 
                                 type="text" 
-                                class=" bg-white h-10 w-full pr-8 pl-5 rounded z-0 focus:shadow focus:outline-none border border-slate-300" 
+                                className=" bg-white h-10 w-full pr-8 pl-5 rounded z-0 focus:shadow focus:outline-none border border-slate-300" 
                                 placeholder="Search and add tags..."
                                 value = {
                                         this.props.newPaperDetails.searchedTagKey

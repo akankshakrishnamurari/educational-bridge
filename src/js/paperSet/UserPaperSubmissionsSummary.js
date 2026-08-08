@@ -7,7 +7,7 @@ import ClipLoader from "react-spinners/ClipLoader";
 import EducationalBridgeHeader from '../header/EducationalBridgeHeader';
 import EmptyState from '../../components/common/EmptyState';
 import Badge from '../../components/common/Badge';
-import AdRail from '../../components/common/AdRail';
+import Footer from '../../components/common/Footer';
 import StatTile from '../../components/common/StatTile';
 import { UserDetailsUtil } from '../../utils/UserDetailsUtil';
 import { typography, layout } from '../../constants/designTokens';
@@ -235,15 +235,12 @@ class UserPaperSubmissionsSummary extends React.Component {
         const papers = this.getSortedPapers();
         return <div className="bg-gray-50 min-h-screen">
             <EducationalBridgeHeader/>
-            <div className={layout.container + ' py-6 md:py-8 flex gap-6 items-start'}>
-                <AdRail />
-                <div className="flex-1 min-w-0 max-w-3xl mx-auto">
-                    {this.getOverviewJSX(papers)}
-                    {this.getResumeJSX(papers)}
-                    {this.getHistoryJSX(papers)}
-                </div>
-                <AdRail />
+            <div className={layout.reading + ' py-6 md:py-8'}>
+                {this.getOverviewJSX(papers)}
+                {this.getResumeJSX(papers)}
+                {this.getHistoryJSX(papers)}
             </div>
+            <Footer />
         </div>      
     }
 }

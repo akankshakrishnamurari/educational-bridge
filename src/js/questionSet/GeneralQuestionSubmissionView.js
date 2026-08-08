@@ -7,7 +7,6 @@ import { currentURLHost } from './../../constants/hostConfig';
 import EducationalBridgeHeader from '../../js/header/EducationalBridgeHeader';
 import { UserDetailsUtil } from '../../utils/UserDetailsUtil';
 import ClipLoader from "react-spinners/ClipLoader";
-import AdRail from '../../components/common/AdRail';
 import Badge from '../../components/common/Badge';
 import Button from '../../components/common/Button';
 import MathContent from '../../components/common/MathContent';
@@ -392,12 +391,11 @@ class GeneralQuestionSubmissionView extends React.Component {
         return (
             <div className="bg-gray-50 min-h-screen pb-24">
                 <EducationalBridgeHeader/>
-                {/* Symmetric gutters via the shared container token. This page
+                {/* Symmetric gutters via the shared reading token. This page
                     previously applied padding-right only, so its content column sat
                     off-centre relative to every other page. */}
-                <div className={layout.container + " py-6 md:py-8 flex gap-6 items-start"}>
-                <AdRail />
-                <div className="flex-1 min-w-0 max-w-3xl mx-auto">
+                <div className={layout.reading + " py-6 md:py-8"}>
+                <div className="min-w-0">
                     {this.getVerdictJSX()}
                     {this.getClassificationJSX()}
 
@@ -418,7 +416,6 @@ class GeneralQuestionSubmissionView extends React.Component {
                     {this.getUserStatsJSX()}
                     {this.getCommunityStatsJSX()}
                 </div>
-                <AdRail />
                 </div>
                 {this.getActionBarJSX()}
             </div>

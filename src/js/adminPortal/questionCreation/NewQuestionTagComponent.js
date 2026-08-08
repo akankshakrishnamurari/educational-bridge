@@ -131,7 +131,7 @@ class NewQuestionTagComponent extends React.Component {
         response.push(
             <button className={" my-1 transition-colors rounded border border-gray-300 py-2 bg-white text-gray-700 hover:bg-gray-50 " + generalTextSize + " focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"}
                 onClick={() => window.open(currentURLHost + 'tags/new')}>
-                <p className={generalTextSize + " px-2 ..."}>
+                <p className={generalTextSize + " px-2"}>
                     Request New Tag
                 </p>
             </button>
@@ -175,7 +175,7 @@ class NewQuestionTagComponent extends React.Component {
                 if(element.tagName.startsWith(this.props.newQuestionDetails.tagPrefixPairMap[index]["prefix"])){
                     let prefixLength= this.props.newQuestionDetails.tagPrefixPairMap[index]["prefix"].length;
                     response[index].push(
-                        <div className="flex flex-row ...">
+                        <div className="flex flex-row">
                             <div className="py-2 ">{JSXUtils.getTagViewJSX(element.tagName.substr(prefixLength))}</div>
                             <div className="px-1 pr-3" onClick={()=>this.removeTag(element.id)}>
                                 <div className={"flex my-2 transition-colors rounded bg-gray-100 border border-gray-300 py-2 text-gray-600 " + generalTextSize + " hover:bg-danger-50 hover:text-danger-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-danger-500"}>
@@ -200,7 +200,7 @@ class NewQuestionTagComponent extends React.Component {
             }
             else{
                 response[index]=(
-                    <div class="flex flex-row whitespace-nowrap">
+                    <div className="flex flex-row whitespace-nowrap">
                         <div  className='py-2'>
                            {response[index][0]}     
                         </div>
@@ -230,13 +230,13 @@ class NewQuestionTagComponent extends React.Component {
             </div>
         </div>
 
-        let content = <div className='flex w-full ...'>
+        let content = <div className='flex w-full'>
                 <div className='flex flex-col w-full px-20'>
                     <div>
                         <input
                             type="text"  
                             className = { searchBoxInputCSS + "w-full focus:outline-none rounded py-2 px-2 border"}
-                            placeholder="Search here ..."
+                            placeholder="Search tags"
                             // value = {this.props.newChannelDetails.channelName}  
                             onChange = {(event) => this.updateTagDetails(event,fixedIndex)}  
                         />
@@ -276,7 +276,6 @@ class NewQuestionTagComponent extends React.Component {
     }
 
     showMandatorySuggestedTags = () =>{
-        console.log("djjjjjjjjjj")
         if (this.props.newQuestionDetails.tagPrefix=="Subject : ") {
             return this.showSuggestedTag("Subject : ");
         }
@@ -349,7 +348,7 @@ class NewQuestionTagComponent extends React.Component {
                                 <input
                                     type="text"  
                                     className = { searchBoxInputCSS + smallerTextSize + " w-full focus:outline-none rounded py-1 px-2 border"}
-                                    placeholder="Search here ..."
+                                    placeholder="Search tags"
                                     // value = {this.props.newChannelDetails.channelName}  
                                     onChange = {(event) => this.updateTagDetails(event, "Subject : ")}  
                                 />
@@ -378,7 +377,7 @@ class NewQuestionTagComponent extends React.Component {
                                 <input
                                     type="text"  
                                     className = { searchBoxInputCSS + smallerTextSize + " w-full rounded py-1 px-2 border"}
-                                    placeholder="Search here ..."
+                                    placeholder="Search tags"
                                     onChange = {(event) => this.updateTagDetails(event, this.props.newQuestionDetails.nonMandatoryTagPrefix)}  
                                 />
                             </div>

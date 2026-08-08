@@ -4,7 +4,6 @@ import {saveUserDetails, updateGeneralInfo} from '../../store/actions/solgressAc
 import { MiscUtils } from '../../utils/MiscUtils';
 import EducationalBridgeHeaderLargeScreen from './largeScreen/EducationalBridgeHeaderLargeScreen';
 import EducationalBridgeHeaderSmallScreen from './smallScreen/EducationalBridgeHeaderSmallScreen';
-import PaperAPIsConnector from '../../apis/PaperAPIsConnector';
 import UserAPIConnector from '../../apis/UserAPIConnector';
 
 
@@ -23,9 +22,10 @@ const mapStateToProps = state => {
 
 class EducationalBridgeHeader extends React.Component {
     saveUserDetails = (payload) => {
-        UserAPIConnector.updateUserDetails(payload).then(userData=>{
-            console.log(5);
-        });
+        // Fire and forget: the caller has already stored the session locally, so a
+        // failure here must not block sign-in. UserAPIConnector already swallows and
+        // reports transport errors.
+        UserAPIConnector.updateUserDetails(payload);
     }
     render(){
         if(MiscUtils.isUserOnSmallScreen()){

@@ -34,22 +34,22 @@ class NewPaperPreview extends React.Component {
         }
         return <TableRow className = 'bg-gray-100'>
             <TableCell className='border border-slate-300'>
-                <p className="text-base sm:text-lg md:text-md xl:text-xl text-left font-bold flex justify-center ...">
+                <p className="text-base sm:text-lg md:text-md xl:text-xl text-left font-bold flex justify-center">
                     Q. No
                 </p>
             </TableCell>
             <TableCell className='border border-slate-300'>
-                <p className="text-base sm:text-lg md:text-md xl:text-xl  text-left font-bold flex justify-center ...">
+                <p className="text-base sm:text-lg md:text-md xl:text-xl  text-left font-bold flex justify-center">
                     View
                 </p>
             </TableCell>
             <TableCell className='border border-slate-300'>
-                <p className="text-base sm:text-lg md:text-md xl:text-xl  text-left font-bold pl-10 ...">
+                <p className="text-base sm:text-lg md:text-md xl:text-xl  text-left font-bold pl-10">
                     {questionHeaderText}
                 </p>
             </TableCell>
             <TableCell className='border border-slate-300'>
-                <p className="text-base sm:text-lg md:text-md xl:text-xl  text-left font-bold flex justify-center ...">
+                <p className="text-base sm:text-lg md:text-md xl:text-xl  text-left font-bold flex justify-center">
                     Marks
                 </p>
             </TableCell>
@@ -88,7 +88,7 @@ class NewPaperPreview extends React.Component {
 
     getMarksCell = () => {
         return <div>
-            <div className='flex flex-row justify-center items-center hover:bg-slate-100 py-2...'>
+            <div className='flex flex-row justify-center items-center hover:bg-slate-100 py-2'>
                 <div className='bg-success-500 px-3 py-2'>+{3}</div>
                 <div className = 'px-1 py-2'>,</div>
                 <div className='bg-danger-500 px-3 py-2 '>{-1}</div>
@@ -111,7 +111,7 @@ class NewPaperPreview extends React.Component {
                 let questionsPreview = [];
                 this.props.newPaperDetails.subjectWiseSectionWiseSelectedQuestions[subjectName][sectionName]
                     .forEach((questionId, index) => {
-                        let tiggerContent = <div className='flex flex-row ...'>
+                        let tiggerContent = <div className='flex flex-row'>
                             <div className='text-xl bg-gray-300 rounded py-2 px-5'>Q {index+1}</div>
                             {this.getQuestionMinimisedPreviewJSX(questionId)}
                         </div>;
@@ -154,19 +154,27 @@ class NewPaperPreview extends React.Component {
                 return response;
             }
             let index = 0;
-            for (var subjectName in this.props.newPaperDetails.subjectWiseSectionWiseSelectedQuestions) {
+            // `var subjectName` was function-scoped, so the arrow function below closed
+            // over a single shared binding rather than one per iteration. forEach runs
+            // synchronously so the value happened to be right, but it is a hazard the
+            // moment anything here becomes async. `const` in a for...in gives a fresh
+            // binding per iteration.
+            //
+            // The inner callback also named its parameter `index`, shadowing the outer
+            // `index` that tracks which subject we are on. Renamed to `rowIndex`.
+            for (const subjectName in this.props.newPaperDetails.subjectWiseSectionWiseSelectedQuestions) {
                 let sectionName = this.props.newPaperDetails.subjectWiseSectionNames[index][0];
                 let questionsBodyRows = [];
                 this.props.newPaperDetails.subjectWiseSectionWiseSelectedQuestions[subjectName][sectionName]
-                    .forEach((questionId, index) => {
+                    .forEach((questionId, rowIndex) => {
                         let questionRow = <TableRow>
-                            <TableCell className='border border-slate-300 flex justify-center ...'>
-                                <div className='text-xs sm:text-base md:text-lg xl:text-xl flex justify-center ...' >
-                                    {index+1}
+                            <TableCell className='border border-slate-300 flex justify-center'>
+                                <div className='text-xs sm:text-base md:text-lg xl:text-xl flex justify-center' >
+                                    {rowIndex+1}
                                 </div>
                             </TableCell>
-                            <TableCell className='border border-slate-300 flex justify-center ...'>
-                                <div className='flex justify-center ...' >
+                            <TableCell className='border border-slate-300 flex justify-center'>
+                                <div className='flex justify-center' >
                                     <BsEyeFill className='px-1 py-1 w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10' color = {'blue'}/>
                                 </div>
                             </TableCell>
@@ -187,7 +195,11 @@ class NewPaperPreview extends React.Component {
                         {questionsBodyRows}
                     </TableBody>
                 </Table>;
-                response.push(<div className = 'bg-slate-200 text-base sm:text-lg md:text-md xl:text-xl py-3'>{(subjectName =='Test Subject'?'Paper':subjectName) + " Overview"}</div>);
+                // This used to read `subjectName == 'Test Subject' ? 'Paper' : subjectName`.
+                // "Test Subject" was the old placeholder default, which has since been
+                // replaced by "Subject N" in NewPaperPortal.initializeNewPaperDetails,
+                // so the special case could never match anything.
+                response.push(<div className = 'bg-slate-200 text-base sm:text-lg md:text-md xl:text-xl py-3'>{subjectName + " Overview"}</div>);
                 response.push(questionsTable);
                 response.push(<div className='py-3'></div>);
                 index += 1;
@@ -217,7 +229,7 @@ class NewPaperPreview extends React.Component {
 
     getPreviewHeader = () => {
         return <div className='py-3 flex justify-center items-center'>
-            <div className='flex flex-row ...'>
+            <div className='flex flex-row'>
                 <div className='text-base sm:text-lg md:text-md xl:text-xl py-2 px-3 w-full bg-gray-100'>
                     View Style : 
                 </div>
@@ -234,7 +246,7 @@ class NewPaperPreview extends React.Component {
     } 
 
     render() {
-        return <div className='overflow-y-auto max-h-[49rem] ...'>
+        return <div className='overflow-y-auto max-h-[49rem]'>
             {this.getPreviewHeader()}
             {this.getPreviewDetails()}
         </div>;

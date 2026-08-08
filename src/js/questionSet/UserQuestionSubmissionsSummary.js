@@ -7,8 +7,8 @@ import ClipLoader from "react-spinners/ClipLoader";
 import EducationalBridgeHeader from '../header/EducationalBridgeHeader';
 import EmptyState from '../../components/common/EmptyState';
 import Badge from '../../components/common/Badge';
-import AdRail from '../../components/common/AdRail';
 import MathContent from '../../components/common/MathContent';
+import Footer from '../../components/common/Footer';
 import StatTile from '../../components/common/StatTile';
 import MeterBar from '../../components/common/MeterBar';
 import { UserDetailsUtil } from '../../utils/UserDetailsUtil';
@@ -252,14 +252,11 @@ class UserQuestionSubmissionsSummary extends React.Component {
         const grouped = this.getGroupedQuestions();
         return <div className="bg-gray-50 min-h-screen">
             <EducationalBridgeHeader/>
-            <div className={layout.container + ' py-6 md:py-8 flex gap-6 items-start'}>
-                <AdRail />
-                <div className="flex-1 min-w-0 max-w-3xl mx-auto">
-                    {this.getOverviewJSX(grouped)}
-                    {this.getListJSX(grouped)}
-                </div>
-                <AdRail />
+            <div className={layout.reading + ' py-6 md:py-8'}>
+                {this.getOverviewJSX(grouped)}
+                {this.getListJSX(grouped)}
             </div>
+            <Footer />
         </div> 
     }
 }

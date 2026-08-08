@@ -5,11 +5,11 @@ import ChannelReceiver from '../../apis/ChannelReceiver';
 import {currentURLHost} from './../../constants/hostConfig';
 import EmptyState from '../../components/common/EmptyState';
 import Button from '../../components/common/Button';
+import Footer from '../../components/common/Footer';
 import ClipLoader from "react-spinners/ClipLoader";
 import { typography, layout } from '../../constants/designTokens';
 import { accent } from '../../constants/accents';
 import EducationalBridgeHeader from '../header/EducationalBridgeHeader';
-import AdRail from '../../components/common/AdRail';
 import { AiOutlineSearch } from "react-icons/ai";
 
 // Channel directory.
@@ -199,9 +199,8 @@ class ChannelHome extends React.Component {
         }
         return <div className="bg-gray-50 min-h-screen">
             <EducationalBridgeHeader/>
-            <div className={layout.container + ' py-6 md:py-8 flex gap-6 items-start'}>
-                <AdRail />
-                <div className="flex-1 min-w-0">
+            <div className={layout.container + ' py-6 md:py-8'}>
+                <div className="min-w-0">
                     <h1 className={typography.h1}>Channels</h1>
                     <p className="mt-1 text-sm text-gray-500 max-w-2xl">
                         Channels group questions by course, batch or creator. Open one to practise only its questions.
@@ -211,8 +210,8 @@ class ChannelHome extends React.Component {
                     </div>
                     {this.getGridJSX()}
                 </div>
-                <AdRail />
             </div>
+            <Footer />
         </div>;
     }
 

@@ -1,124 +1,176 @@
 import React from 'react';
 import '../../../App.css';
-import {JSXUtils} from "../../../utils/JSXUtils";
-import {CSSConventionUtil} from "../../../utils/CSSConventionUtil";
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableRow from '@mui/material/TableRow';
-import {generalTextSize} from './../../../constants/TextSizeConstants';
+import Collapsible from 'react-collapsible';
+import { AiOutlineDownSquare } from 'react-icons/ai';
 import SingleSelectMCQQuestion from '../../questionSet/largeScreen/SingleSelectMCQQuestion';
-import Collapsible from "react-collapsible";
-import {AiOutlineDownSquare} from "react-icons/ai";
+import MathContent from '../../../components/common/MathContent';
+import Button from '../../../components/common/Button';
+import { typography } from '../../../constants/designTokens';
 import { currentURLHost } from '../../../constants/hostConfig';
 import { UserDetailsUtil } from '../../../utils/UserDetailsUtil';
-import QuestionsReceiver from "../../../apis/QuestionsReceiver";
-import { Chart } from "react-google-charts";
+import QuestionsReceiver from '../../../apis/QuestionsReceiver';
+import { logError } from '../../../utils/logger';
+
+// Shared question preview, used by the paper-authoring surfaces and by the
+// question review page.
+//
+// Cleaned up in this pass:
+//  * Table, TableBody, TableCell, TableRow and react-google-charts' Chart were all
+//    imported and never referenced. Chart in particular pulls a charting library
+//    into every screen that previews a question.
+//  * Every text block was a <div> nested inside a <p>, which is invalid HTML —
+//    the browser closes the paragraph early, so the styling on the <p> silently
+//    stopped applying to its own content.
+//  * The "not yet updated" placeholder was passed through dangerouslySetInnerHTML
+//    even though it is a static literal with no markup in it.
+//  * One node used the raw HTML attribute `class` instead of `className`, so its
+//    classes were dropped and React warned on every render.
+//  * Several className strings ended in a literal "" — leftovers from a
+//    truncated paste, emitting a meaningless class name.
 
 class SingleSelectMCQPreview extends React.Component {
 
-    getAdditionalPreview = () => {
-        let solutionSectiontiggerContent = <div className={'flex flex-row w-full  bg-slate-50 px-3 py-2' }>
-            <div className={ generalTextSize + "  font-bold w-full "}>
-                Solution Section
-            </div>
-            <div className='flex justify-end'>
-                <AiOutlineDownSquare size={25}/>
-            </div>
-        </div>
-        return <div>
-                    <Collapsible 
-                        trigger={solutionSectiontiggerContent}
-                        className = "border-b-2 Collapsible__trigger">
-                        <div>
-                            <p className={generalTextSize + "  text-left pl-2 md:pl-10 py-2 bg-success-50 border border-slate-200 ..."}>
-                                <div className='flex justify-center'>
-                                    Correct Option is : option {this.props.correctOption + 1}
-                                </div>
-                            </p>
-                        </div>
-                        {this.getAnswerDescriptionJSX()}
-                    </Collapsible>
-        </div>
+    doNothing = () => {}
+
+    redirectToNextRecommendedQuestion = () => {
+        const questionId = this.props.submittedQuestionDetails
+            && this.props.submittedQuestionDetails.questionData
+            && this.props.submittedQuestionDetails.questionData.id;
+        if (!questionId) {
+            return;
+        }
+        QuestionsReceiver.getNextRecommendedQuestion(questionId, UserDetailsUtil.getUserGoogleId())
+            .then((questionsData) => {
+                // The API returns null on failure (see apis/QuestionsReceiver), and a
+                // recommendation is not guaranteed to exist, so both cases are checked
+                // before navigating. Previously this threw on a null response and the
+                // button appeared to do nothing.
+                const nextId = questionsData && questionsData.data && questionsData.data.questionId;
+                if (!nextId) {
+                    return;
+                }
+                window.location.href = currentURLHost + 'question/view?question_id=' + nextId;
+            })
+            .catch((e) => logError('SingleSelectMCQPreview.redirectToNextRecommendedQuestion', e));
     }
 
     getAnswerDescriptionJSX = () => {
-        if(this.props.answerDescription == null || this.props.answerDescription.length < 2) {
-            return <div className=' px-4 md:px-10 py-5 border border-slate-200 ...'>
-                <p className={ generalTextSize + " flex text-justify "}>
-                    <div dangerouslySetInnerHTML={{__html: "Answer Description is not yet updated by the problem author"}}></div>
-                </p>
-            </div>;
-        }
-        return <div className=' px-4 md:px-10 py-5 border border-slate-200 ...'>
-            <p className={ generalTextSize + " flex text-justify "}>
-                <div dangerouslySetInnerHTML={{__html: JSXUtils.htmlDecode(this.props.answerDescription)}}></div>
-            </p>
-        </div>
-    }
+        const description = this.props.answerDescription;
+        const hasDescription = description !== null
+            && description !== undefined
+            && String(description).trim().length > 1;
 
-    redirectToNextRecommendedQuestion = () => {
-        QuestionsReceiver.getNextRecommendedQuestion(this.props.submittedQuestionDetails.questionData.id, UserDetailsUtil.getUserGoogleId()).then(questionsData=>{
-            let questionId = questionsData.data.questionId;
-            window.location.href = currentURLHost+"question/view?question_id="+questionId;
-        });
-    }
-
-    doNothing = () => {}
-
-    getNextSimilarQuestionButton = () => {
-        return <div className='pb-2 bg-white'>
-            <button 
-                className={CSSConventionUtil.buttonClassName}
-                onClick = {() => this.redirectToNextRecommendedQuestion()}
-            >
-                <div className="px-2 ...">
-                    <div class="animate-ping absolute inline-flex h-4 w-5 flex justify-center rounded-full bg-success-700 opacity-20"></div>
-                    <div className={generalTextSize + " text-white ..."} >
-                        Next Question
-                    </div>
+        if (!hasDescription) {
+            return (
+                <div className="px-4 md:px-10 py-6 border-t border-gray-200">
+                    <p className={typography.caption + ' italic'}>
+                        The author hasn&rsquo;t added a written solution for this question yet.
+                    </p>
                 </div>
-            </button>
-        </div>
+            );
+        }
+        return (
+            <div className="px-4 md:px-10 py-6 border-t border-gray-200">
+                <MathContent
+                    html={description}
+                    className={typography.body + ' text-left leading-relaxed'}
+                />
+            </div>
+        );
     }
+
+    getAdditionalPreview = () => {
+        const trigger = (
+            <div className="flex flex-row items-center w-full bg-gray-50 px-3 py-2 cursor-pointer">
+                <div className={typography.h3 + ' w-full'}>
+                    Solution
+                </div>
+                <div className="flex justify-end text-gray-500">
+                    <AiOutlineDownSquare size={22} />
+                </div>
+            </div>
+        );
+
+        // correctOption is a zero-based index, so it is displayed as a letter to match
+        // how the options themselves are labelled everywhere else in the app.
+        const index = Number(this.props.correctOption);
+        const label = Number.isInteger(index) && index >= 0
+            ? String.fromCharCode(65 + index)
+            : null;
+
+        return (
+            <div>
+                <Collapsible
+                    trigger={trigger}
+                    className="border-b-2 Collapsible__trigger"
+                >
+                    {label && (
+                        <div className="flex justify-center px-4 py-3 bg-success-50 border-t border-success-100">
+                            <span className="text-sm font-semibold text-success-700">
+                                Correct answer: option {label}
+                            </span>
+                        </div>
+                    )}
+                    {this.getAnswerDescriptionJSX()}
+                </Collapsible>
+            </div>
+        );
+    }
+
+    getNextSimilarQuestionButton = () => (
+        <div className="pb-2 px-4 md:px-10 bg-white">
+            <Button
+                variant="secondary"
+                size="sm"
+                onClick={this.redirectToNextRecommendedQuestion}
+            >
+                Next question
+            </Button>
+        </div>
+    )
 
     render() {
-        if(this.props.needCompletePreview == false) {
+        // Was `needCompletePreview == false`, which also matched 0, "" and undefined.
+        if (!this.props.needCompletePreview) {
             return (
-                <div className='border-2 border-bg-slate-500'>
-                    <div className='pb-10 md:px-24 bg-white'>
+                <div className="bg-white">
+                    <div className="pb-10 md:px-24">
                         <SingleSelectMCQQuestion
-                            questionDetails = {this.props.questionDetails}
-                            selectedOptionId = {null}
-                            updateQuestionAnswer = {this.doNothing}
-                            selectedOptionBackgroundColor ={"bg-success-200"}
-                            needCompletePreview = {false}
-                            optionIdToOptionResponseCount = {null}
-                            totalResponseCount = {null}
-                            submittedQuestionDetails = {null}
-                            options = {this.props.options}
+                            questionDetails={this.props.questionDetails}
+                            selectedOptionId={null}
+                            updateQuestionAnswer={this.doNothing}
+                            selectedOptionBackgroundColor={'bg-success-200'}
+                            needCompletePreview={false}
+                            optionIdToOptionResponseCount={null}
+                            totalResponseCount={null}
+                            submittedQuestionDetails={null}
+                            options={this.props.options}
                         />
                     </div>
                 </div>
             );
         }
+
+        const submitted = this.props.submittedQuestionDetails;
+        const wasCorrect = this.props.selectedOptionId === this.props.correctOptionId;
+
         return (
-            <div className='border-2 border-bg-slate-500'>
-                <div className='pb-4 bg-white'>
+            <div className="bg-white">
+                <div className="pb-4">
                     <SingleSelectMCQQuestion
-                        questionDetails = {this.props.submittedQuestionDetails.questionData}
-                        selectedOptionId = {this.props.submittedQuestionDetails.selectedOptionId}
-                        updateQuestionAnswer = {this.doNothing}
-                        selectedOptionBackgroundColor ={this.props.selectedOptionId==this.props.correctOptionId?"bg-success-200":"bg-danger-200"}
-                        needCompletePreview = {this.props.needCompletePreview}
-                        optionIdToOptionResponseCount = {this.props.submittedQuestionDetails.optionIdToOptionResponseCount}
-                        totalResponseCount = {this.props.submittedQuestionDetails.totalResponses}
-                        submittedQuestionDetails = {this.props.submittedQuestionDetails}
-                        options = {this.props.options}
+                        questionDetails={submitted.questionData}
+                        selectedOptionId={submitted.selectedOptionId}
+                        updateQuestionAnswer={this.doNothing}
+                        selectedOptionBackgroundColor={wasCorrect ? 'bg-success-200' : 'bg-danger-200'}
+                        needCompletePreview={this.props.needCompletePreview}
+                        optionIdToOptionResponseCount={submitted.optionIdToOptionResponseCount}
+                        totalResponseCount={submitted.totalResponses}
+                        submittedQuestionDetails={submitted}
+                        options={this.props.options}
                     />
                 </div>
                 {this.getNextSimilarQuestionButton()}
-                {this.props.needCompletePreview?this.getAdditionalPreview():<div/>}
+                {this.getAdditionalPreview()}
             </div>
         );
     }

@@ -144,7 +144,7 @@ class NewPaperPortal extends React.Component {
         if(this.props.newPaperDetails.containsMoreThanOneSubject == 'false') {
             return;
         }
-        return <div className="flex flex-row ... px-5 py-5">
+        return <div className="flex flex-row px-5 py-5">
             <div>
                 <div className= { generalTextSize + " leading-tight text-gray-800  py-2" }>
                     Number of Subjects :
@@ -153,7 +153,7 @@ class NewPaperPortal extends React.Component {
             <input autoComplete="off"
                       className={generalTextSize + " resize mx-2 text-gray-600  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-700    bg-white font-normal w-64 h-10 flex items-center pl-3 border-gray-300 rounded border shadow"}
                       value = {this.props.newPaperDetails.numberOfSubjects}
-                      placeholder="Placeholder"
+                      placeholder="e.g. 3"
                       onChange={(event)=>this.updateNumberOfSubjects(event)}
             />
         </div>;
@@ -181,7 +181,7 @@ class NewPaperPortal extends React.Component {
                 />
             );
         }
-        return <div className="flex flex-row flex-col... px-5 py-5">{response}</div>;
+        return <div className="flex flex-row flex-col px-5 py-5">{response}</div>;
     }
 
     getSubjectWiseSectionWiseNumberOfQuestionsInput = (subjectIndex) => {

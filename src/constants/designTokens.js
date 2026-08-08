@@ -25,38 +25,41 @@ export const typography = {
     stat: 'text-xl md:text-2xl font-bold text-primary-600',
 };
 
-// Single source for page width and gutter. The header and every page body must
-// use `layout.container` so the wordmark, nav and content all sit on the same
-// left/right edge — misaligned containers were the main reason the old chrome
-// looked untidy.
+// Single source for page width and gutter. The header and every page body use
+// the same token so the wordmark, nav and content all sit on one left/right
+// edge — misaligned containers were the main reason the old chrome looked untidy.
 //
-// 1800px is wide enough to carry two ad rails plus a comfortable content column
-// on a 1080p+ display, without going edge-to-edge on ultrawides.
+// WHY THIS IS NO LONGER 1800px
+// ----------------------------
+// The container used to be capped at 1800px via an arbitrary-value max-width
+// utility. (Written out in prose rather than as the class itself: Tailwind scans
+// these files as plain text, so spelling the utility here would make it emit a
+// real, permanently-unused CSS rule.) That figure was not chosen for
+// readability: it was the width needed to fit a 300px advertising rail on each
+// side of a usable content column. With the rails removed there is nothing left
+// to justify it, and 1800px of content on a wide display is simply hard to read —
+// list rows stretch until the text and its action cluster are a screen apart.
+//
+// 1280px (max-w-7xl) is the widest comfortable measure for the list and table
+// pages. Single-question, results and article pages use `reading` instead,
+// because those are prose and want a much tighter measure.
 export const layout = {
-    container: 'w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8',
+    // Content pages: question list, channels, dashboards, authoring.
+    container: 'w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8',
 
-    // Marketing / landing width. Deliberately much narrower than `container`:
-    // 1800px only exists so content pages can carry two 300px ad rails, and at
-    // that width a landing page's prose runs edge to edge with no breathing
-    // room. 1152px centred with a wide gutter is a normal reading measure and
-    // is what makes the page feel composed rather than stretched.
+    // Reading width for one-thing-at-a-time pages: solving a question, a result
+    // report, a form. Prose and question bodies become hard to track much beyond
+    // this.
+    reading: 'w-full max-w-3xl mx-auto px-4 sm:px-6',
+
+    // Slightly wider reading measure for pages that mix prose with side-by-side
+    // figures, such as the paper score report.
+    wideReading: 'w-full max-w-4xl mx-auto px-4 sm:px-6',
+
+    // Marketing / landing width, used by the home and about pages. Wider than
+    // `reading` because those pages are built from full-bleed bands and grids
+    // rather than a single column of text.
     marketing: 'w-full max-w-6xl mx-auto px-6 sm:px-10 lg:px-12',
-
-    // Row that holds [AdRail, content, AdRail]. Deliberately NO justify-center:
-    // the rails must pin to the container edges so they land in the same place on
-    // every page. Centring the row instead makes the rails drift inward by a
-    // different amount on each page, depending on that page's content width.
-    railRow: 'flex gap-6 items-start',
-
-    // Content column between the rails. `flex-1 min-w-0` fills the space; min-w-0
-    // is what stops long question HTML from overflowing the flex track.
-    column: 'flex-1 min-w-0',
-
-    // Reading-width column for single-question / article pages. Capped for
-    // legibility, but still a flex child that fills its track, with mx-auto
-    // centring it *between* the rails rather than moving the rails.
-    readingColumn: 'flex-1 min-w-0 max-w-3xl mx-auto',
-    wideReadingColumn: 'flex-1 min-w-0 max-w-4xl mx-auto',
 };
 
 export const radius = {

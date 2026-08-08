@@ -6,6 +6,8 @@ User-agent: *
 # listing pages are ours and are open to crawlers.
 Disallow: /question/view
 Disallow: /question/upsert
+# Per-attempt exam URLs carry a paper_instance_id and are meaningless to a crawler.
+Disallow: /paper/view
 Disallow: /question/submission/view
 Disallow: /paper/submission/view
 Disallow: /paper/new

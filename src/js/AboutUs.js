@@ -5,6 +5,7 @@ import EducationalBridgeHeader from './header/EducationalBridgeHeader';
 import Badge from '../components/common/Badge';
 import Avatar from '../components/common/Avatar';
 import Button from '../components/common/Button';
+import Footer from '../components/common/Footer';
 import { typography, layout } from '../constants/designTokens';
 import { currentURLHost } from '../constants/hostConfig';
 import { contributors } from '../constants/contributors';
@@ -275,6 +276,7 @@ class AboutUs extends React.Component {
             {this.getMissionJSX()}
             {this.getTeamJSX()}
             {this.getContactJSX()}
+            <Footer />
         </div>
     }
 

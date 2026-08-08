@@ -8,15 +8,17 @@ import NewTagCreation from './js/adminPortal/NewTagCreation';
 import NewChannelCreation from './js/adminPortal/NewChannelCreation';
 import QuestionSet from './js/questionSet/QuestionSet';
 import GeneralQuestionSubmissionView from './js/questionSet/GeneralQuestionSubmissionView';
-import PaperSet from './js/paperSet/PaperSet';
 import GeneralQuestionView, {loadData} from './js/questionSet/GeneralQuestionView';
 import ChannelHome from './js/channelSet/ChannelHome';
 import UserQuestionSubmissionsSummary from './js/questionSet/UserQuestionSubmissionsSummary';
 import UserPaperSubmissionsSummary from './js/paperSet/UserPaperSubmissionsSummary';
 import AboutUs from './js/AboutUs';
 import Home from './js/Home';
+import NotFound from './js/NotFound';
 
-export default [
+// Named rather than exported anonymously so the array shows up under a useful name
+// in stack traces and React DevTools.
+const routes = [
     {
         loadData,
         path: "/question/view",
@@ -107,7 +109,13 @@ export default [
         element: <AboutUs/>,
         exact: false,
     },
+    // Catch-all. Must stay last for readability, though React Router v6 ranks a
+    // "*" path below every concrete path regardless of declaration order, so a
+    // real route can never be shadowed by this one.
+    {
+        path: "*",
+        element: <NotFound/>,
+    },
 ];
 
-// <Routes>
-            // <Route exact path="/question/upsert" element={<QuestionCreation editorRef={editorRef}/>}/>
+export default routes;

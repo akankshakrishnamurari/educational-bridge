@@ -151,7 +151,7 @@ class TagsFilterViewSmall extends React.Component {
                         //     <b>+ </b>
                         //     {temporarySelectedTags[index].tagName}
                         // </div>
-                        <div className="flex flex-row ...">
+                        <div className="flex flex-row">
                             <div className="py-2 ">{JSXUtils.getTagViewJSX(temporarySelectedTags[index].tagName)}</div>
                             <div className="px-1 pr-3" onClick={()=>this.removeSelectedAppliedTag(temporarySelectedTags[index].id)}>
                                 <div className={"flex my-2 transition-colors rounded bg-gray-100 border border-gray-300 py-2 text-gray-600 " + generalTextSize + " hover:bg-danger-50 hover:text-danger-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-danger-500"}>
@@ -223,13 +223,13 @@ class TagsFilterViewSmall extends React.Component {
             </div>
         </div>
 
-        let content = <div className='flex w-full ...'>
+        let content = <div className='flex w-full'>
                 <div className='flex flex-col w-full px-20'>
                     <div>
                         <input
                             type="text"  
                             className = { searchBoxInputCSS + "w-full focus:outline-none rounded py-2 px-2 border"}
-                            placeholder="Search here ..."
+                            placeholder="Search filters"
                             // value = {this.props.newChannelDetails.channelName}  
                             onChange = {(event) => this.updateTagDetails(event,fixedIndex)}  
                         />

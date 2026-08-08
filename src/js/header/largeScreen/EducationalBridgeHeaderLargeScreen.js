@@ -15,6 +15,7 @@ import { GoogleLogin } from 'react-google-login';
 import {FcGoogle} from "react-icons/fc"
 import TagFilterViewSmall from '../../questionSet/TagFilter/TagFilterViewSmall';
 import TagFilterViewLarge from '../../questionSet/TagFilter/TagFilterViewLarge'
+import notify from '../../../utils/notify';
 // import styleHeader from '../../header/styleHeader.css'
 // import leftSideBar from src\js\questionSet\TagFilter\leftSideBar.css
 // import leftSideBar from '../../questionSet/TagFilter/leftSideBar'
@@ -68,8 +69,10 @@ class EducationalBridgeHeaderLargeScreen extends React.Component {
         window.location.reload();
     }
 
-    handleGoogleLoginFailureResponse = (response) => {
-        console.log("response from login failed");
+    handleGoogleLoginFailureResponse = () => {
+        // This previously only wrote to the console, so a failed sign-in looked to the
+        // visitor like nothing had happened at all.
+        notify.error("We couldn't sign you in with Google. Please try again.");
     }
 
     handleGoogleLogoutResponse = () => {
@@ -209,11 +212,15 @@ class EducationalBridgeHeaderLargeScreen extends React.Component {
                   )}
                   onClickOutside = {() => this.toggleLoginPopOver()}  
             >
-            <button onClick={() => this.toggleLoginPopOver()}>
+            <button
+                onClick={() => this.toggleLoginPopOver()}
+                aria-label="Open your account menu"
+            >
                 <img 
-                    class="rounded-full w-10 h-10  md:w-12 md:h-12" 
+                    className="rounded-full w-10 h-10  md:w-12 md:h-12" 
                     src={JSON.parse(window.sessionStorage.getItem("userDetails")).imageUrl}
-                    referrerpolicy="no-referrer"
+                    alt=""
+                    referrerPolicy="no-referrer"
                 />
             </button>
           </Popover>;
@@ -353,11 +360,14 @@ class EducationalBridgeHeaderLargeScreen extends React.Component {
             percentage column widths (lg:min-w-[20%]) plus ad hoc px-10 / pl-12
             padding, so nothing lined up with the page below it. */}
         return <header className="sticky top-0 z-max bg-white border-b border-gray-200">
-            {/* Deliberately not `layout.container` here: that class carries the page's
-                left/right gutter (px-4 sm:px-6 lg:px-8), which pushed the logo in from
-                the edge. The header keeps the same max-width/centring so it still lines
-                up on ultrawide screens, just without the side padding. */}
-            <div className="w-full max-w-[1800px] mx-auto">
+            {/* Now uses `layout.container` outright, gutter included, so the wordmark
+                sits on exactly the same left edge as the content beneath it.
+                Previously the header dropped the gutter while keeping the max-width.
+                That was a reasonable trade at 1800px, where the padding pushed the
+                logo a long way in from the viewport edge — but the container is now
+                1280px, so keeping the header flush while content is inset by 32px
+                would leave the logo visibly out of line with the page. */}
+            <div className={layout.container}>
                 <div className="flex items-center gap-4 lg:gap-6 h-16">
 
                     {/* Wordmark: logo is capped below the bar height so it reads as a
