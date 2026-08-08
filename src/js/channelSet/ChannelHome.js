@@ -4,217 +4,228 @@ import {updateChannelDetails} from '../../store/actions/solgressAction';
 import ChannelReceiver from '../../apis/ChannelReceiver';
 import {currentURLHost} from './../../constants/hostConfig';
 import EmptyState from '../../components/common/EmptyState';
-import PageCard from '../../components/common/Card';
 import Button from '../../components/common/Button';
-import { typography } from '../../constants/designTokens';
+import ClipLoader from "react-spinners/ClipLoader";
+import { typography, layout } from '../../constants/designTokens';
+import { accent } from '../../constants/accents';
 import EducationalBridgeHeader from '../header/EducationalBridgeHeader';
 import AdRail from '../../components/common/AdRail';
+import { AiOutlineSearch } from "react-icons/ai";
 
+// Channel directory.
+//
+// THE PAGE DID NOT BROWSE ANYTHING
+// --------------------------------
+// `getAllChannelsSummary()` loaded every channel on mount, but the list was
+// rendered by `getSuggestedChannelsJSX()` which returned early unless
+// `isChannelSearchActive === true` -- and mount set that flag to false. So the
+// browse page showed an empty box, and the only way to see a channel was to hover
+// the search field, which also made it unreachable on touch. Selecting one then
+// replaced the list with a card containing just the channel's name.
+//
+// It is now a directory: every channel visible immediately, filtered in place by a
+// real (typed, not hovered) search, each one linking straight to its questions.
+//
+// WHAT THE DATA SUPPORTS
+// ----------------------
+// `/channels/summary` returns ONLY `{ id, channelName }` -- ChannelService's
+// builder sets nothing else. No description, no question count, no creator. So no
+// counts are shown, because there are none to show. The accent stripe is derived
+// from the channel name so the grid is scannable and channels stay visually
+// recognisable between visits, which is the most differentiation the payload
+// allows honestly.
 
-const mapDispatchToProps = dispatch => ({
-    updateChannelDetails: (payload) => dispatch(updateChannelDetails(payload))
-})
+// Deterministic accent per channel. Written as a fixed list because Tailwind
+// resolves classes by scanning source text, so the keys must appear literally.
+const ACCENT_KEYS = ['primary', 'success', 'warning', 'danger', 'gray'];
 
+const accentForName = (name) => {
+    if (typeof name !== 'string' || name.length === 0) {
+        return ACCENT_KEYS[0];
+    }
+    let hash = 0;
+    for (let i = 0; i < name.length; i += 1) {
+        hash = (hash * 31 + name.charCodeAt(i)) % 100000;
+    }
+    return ACCENT_KEYS[hash % ACCENT_KEYS.length];
+};
 
-const mapStateToProps = state => {
-    return {
-        channelDetails: state.solgressReducer.channelDetails
-    };
-}
-
+const initialsFor = (name) => {
+    if (typeof name !== 'string' || name.trim().length === 0) {
+        return '?';
+    }
+    return name
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join('');
+};
 
 class ChannelHome extends React.Component {
 
     constructor(props) {
         super(props)
-        this.state = {};
-        this.initializeChannelDetails = this.initializeChannelDetails.bind(this);
+        this.state = { query: '', hasRequested: false };
+    }
+
+    componentDidMount() {
+        this.initializeChannelDetails();
     }
 
     initializeChannelDetails = () => {
-        ChannelReceiver.getAllChannelsSummary().then(channelData=>{
-            let payload = {...this.props.channelDetails};
-            payload.suggestedChannels = channelData.data;
-            payload.isChannelSearchActive = false;
-            this.props.updateChannelDetails(payload);
-        });
-    }
-
-    updateSearchedKey = (event) => {
-        let searchedKey = event.target.value;
-        ChannelReceiver.getSuggestedChannels(searchedKey).then(channelData=>{
-            let payload = {...this.props.channelDetails};
-            payload.suggestedChannels = channelData.data;
-            payload.searchedKey = searchedKey;
-            payload.isChannelSearchActive = true;
-            this.props.updateChannelDetails(payload);
-        });
-    }
-
-    updateSelectedChannel = (channelDetail) => {
-        let payload = {...this.props.channelDetails};
-        payload.selectedChannel = channelDetail;
-        payload.isChannelSearchActive =  false;
-        this.props.updateChannelDetails(payload);   
-    }
-
-    getSuggestedChannelsJSX = () => {
-        if(this.props.channelDetails.isChannelSearchActive === false) {
+        if (this.state.hasRequested) {
             return;
         }
-        let items = [];
-        this.props.channelDetails.suggestedChannels.forEach((channelDetail) => {
-            items.push(
-                <div key={channelDetail.id} className='px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-700 cursor-pointer'
-                    onClick={() => this.updateSelectedChannel(channelDetail)}>
-                    {channelDetail.channelName}
-                </div>
-            )
+        this.setState({ hasRequested: true });
+        ChannelReceiver.getAllChannelsSummary().then(channelData=>{
+            let payload = {...this.props.channelDetails};
+            payload.allChannels = (channelData && Array.isArray(channelData.data)) ? channelData.data : [];
+            this.props.updateChannelDetails(payload);
         });
-        return items;
     }
 
-    deactivateTagSearch = () => {
-        let payload = {...this.props.channelDetails};
-        payload.isChannelSearchActive = false;
-        this.props.updateChannelDetails(payload);
+    /**
+     * Filtering happens client-side against the already-loaded list.
+     *
+     * The previous implementation issued a `suggestion/channels` request on every
+     * keystroke. The full set is already in memory from mount, so filtering locally
+     * is instant and removes a request per character typed.
+     */
+    getVisibleChannels = () => {
+        const all = (this.props.channelDetails && this.props.channelDetails.allChannels) || [];
+        const query = this.state.query.trim().toLowerCase();
+        if (query.length === 0) {
+            return all;
+        }
+        return all.filter((channel) =>
+            typeof channel.channelName === 'string'
+            && channel.channelName.toLowerCase().includes(query)
+        );
     }
 
-    activateTagSearch = () => {
-        let payload = {...this.props.channelDetails};
-        payload.isChannelSearchActive = true;
-        this.props.updateChannelDetails(payload);
-    }
-
-    createNewChannel = () => {
-        window.open(currentURLHost + 'channel/new')
-    }
-
-    getChannelSearchBox = () => {
-        return <div className='flex flex-row items-center gap-3'>
-            <div className="flex-1 min-w-0 max-w-xl">
-                {this.getSearchBoxJSX()}
+    getSearchJSX = () => {
+        const total = ((this.props.channelDetails && this.props.channelDetails.allChannels) || []).length;
+        return <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="relative flex-1 min-w-0 max-w-md">
+                <AiOutlineSearch
+                    size={18}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                />
+                <input
+                    type="search"
+                    className="bg-white border border-gray-300 h-11 w-full pl-10 pr-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                    placeholder={total > 0 ? 'Search ' + total + ' channels' : 'Search channels'}
+                    value={this.state.query}
+                    onChange={(event) => this.setState({ query: event.target.value })}
+                    aria-label="Search channels"
+                />
             </div>
-            <Button variant="primary" onClick={() => this.createNewChannel()}>
-                Create New Channel
+            <Button variant="secondary" onClick={() => { window.location.href = currentURLHost + 'channel/new'; }}>
+                Create a channel
             </Button>
         </div>;
     }
 
-    getSearchBoxJSX = () => {
-        return <div onMouseLeave={()=>this.deactivateTagSearch()} onMouseEnter={()=>this.activateTagSearch()}>
-            <div className="relative w-full">
-                <input 
-                    type="text" 
-                    className="bg-white border border-gray-300 h-11 w-full px-4 rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-                    placeholder="Search channels..."
-                    onChange={(event)=>this.updateSearchedKey(event)}
-                />
-                <div className='absolute w-full z-30 bg-white border border-gray-100 rounded-lg shadow-lg mt-1 overflow-hidden'>
-                    {this.getSuggestedChannelsJSX()}
-                </div>
-            </div>
-        </div>; 
-    }
+    getGridJSX = () => {
+        const channels = this.getVisibleChannels();
+        const all = (this.props.channelDetails && this.props.channelDetails.allChannels) || [];
 
-    // Compact inline toggle. This used to occupy a whole resizable sidebar pane.
-    getHelpSectionEnablingBox = () => {
-        return <label className="inline-flex items-center gap-2 h-9 px-3 shrink-0 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 cursor-pointer hover:bg-gray-50 transition-colors">
-            <input
-                type="checkbox"
-                className="accent-primary-600 w-4 h-4"
-                onChange = {(event) => this.updateHelpSectionEnabling(event)}
-            />
-            Show help
-        </label>;
-    }
-
-    getChannelNameBox = () => {
-        let channelName = 'Select a channel';
-        if (this.props.channelDetails.selectedChannel !== undefined && 
-            this.props.channelDetails.selectedChannel.channelName !== undefined) {
-            channelName = this.props.channelDetails.selectedChannel.channelName;
-        }
-        return <div className={typography.h1 + " px-6 py-3"}>
-            {channelName}
-        </div>;
-    }
-
-    getChannelDetailHeadersJSX = () => {
-        if (this.props.channelDetails.selectedChannel === undefined) {
-            return <div/>;
-        }
-        const tabClass = "px-6 py-3 text-sm font-semibold text-gray-600 hover:text-primary-700 cursor-pointer transition-colors";
-        return <div className="flex bg-white border-b border-gray-100 px-2">
-            <div className={tabClass}
-                onClick={() => window.location.href = currentURLHost + "questions?channel_id="+this.props.channelDetails.selectedChannel.id}>Questions</div>
-            <div className={tabClass}
-                onClick={() => window.location.href = currentURLHost + "channels"}>Channels</div>
-            <div className={tabClass}>Papers</div>
-        </div>;
-    }
-
-    getChannelDetailsJSXBox = () => {
-        if (this.props.channelDetails.selectedChannel === undefined) {
-            return (
+        if (all.length === 0) {
+            return <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-100 p-5 md:p-7">
                 <EmptyState
-                    title="Select a channel"
-                    description="Choose a channel from the list above, or search for one, to see its questions and papers."
+                    title="No channels yet"
+                    description="Channels group questions by course, batch or creator. Create the first one."
                 />
-            );
+                <div className="flex justify-center">
+                    <Button variant="primary" onClick={() => { window.location.href = currentURLHost + 'channel/new'; }}>
+                        Create a channel
+                    </Button>
+                </div>
+            </div>;
         }
-        const channel = this.props.channelDetails.selectedChannel;
-        return (
-            <PageCard className="mx-6">
-                <div className={typography.h3}>{channel.channelName}</div>
-                {channel.channelDescription &&
-                    <div className={typography.caption + ' mt-1'}>{channel.channelDescription}</div>
-                }
-            </PageCard>
-        );
+
+        if (channels.length === 0) {
+            return <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-100 p-5 md:p-7">
+                <EmptyState
+                    title="No channels match that search"
+                    description="Try a shorter search term."
+                />
+            </div>;
+        }
+
+        return <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {channels.map((channel) => {
+                const tone = accent(accentForName(channel.channelName));
+                return <a
+                    key={channel.id}
+                    href={currentURLHost + 'questions?channel_id=' + channel.id}
+                    className="group relative flex flex-col bg-white rounded-xl border border-gray-200 overflow-hidden transition-colors hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                >
+                    <span className={'h-1 w-full ' + tone.rail} aria-hidden="true" />
+                    <div className="flex items-start gap-3.5 p-4 md:p-5">
+                        <span
+                            className={['shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold', tone.softBg, tone.softText].join(' ')}
+                            aria-hidden="true"
+                        >
+                            {initialsFor(channel.channelName)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-semibold text-gray-900 group-hover:text-primary-700 transition-colors">
+                                {channel.channelName}
+                            </span>
+                            <span className="block mt-1.5 text-xs font-medium text-primary-600 inline-flex items-center gap-1">
+                                View questions
+                                <span className="transition-transform group-hover:translate-x-0.5" aria-hidden="true">&rarr;</span>
+                            </span>
+                        </span>
+                    </div>
+                </a>;
+            })}
+        </div>;
     }
 
     render() {
         if(typeof window == `undefined`){
             return <div/>;
         }
-        if(this.props.channelDetails === undefined) {
-            this.initializeChannelDetails();
-            return <div/>;
+        if(this.props.channelDetails === undefined || this.props.channelDetails.allChannels === undefined) {
+            return <div className="bg-gray-50 min-h-screen">
+                <EducationalBridgeHeader/>
+                <div className='flex justify-center py-20'>
+                    <ClipLoader color="#2563EB" size="60"/>
+                </div>
+            </div>;
         }
-        {/* Was a react-split 20/80 layout whose entire 20% draggable pane held a
-            single "Enable Help Section" checkbox, and the page rendered with no
-            header at all - so /channels was a navigation dead end. Now on the same
-            shell as every other page: header, ad rails pinned to the container
-            edges, single content column. */}
         return <div className="bg-gray-50 min-h-screen">
             <EducationalBridgeHeader/>
-            <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8 flex gap-6 items-start">
+            <div className={layout.container + ' py-6 md:py-8 flex gap-6 items-start'}>
                 <AdRail />
                 <div className="flex-1 min-w-0">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                        <div>
-                            <h1 className={typography.h1}>Channels</h1>
-                            <p className="mt-1 text-sm text-gray-500">
-                                Browse questions grouped by channel.
-                            </p>
-                        </div>
-                        {this.getHelpSectionEnablingBox()}
-                    </div>
+                    <h1 className={typography.h1}>Channels</h1>
+                    <p className="mt-1 text-sm text-gray-500 max-w-2xl">
+                        Channels group questions by course, batch or creator. Open one to practise only its questions.
+                    </p>
                     <div className="mt-6">
-                        {this.getChannelSearchBox()}
+                        {this.getSearchJSX()}
                     </div>
-                    <div className="mt-4 bg-white border border-gray-200 rounded-xl overflow-hidden">
-                        {this.getChannelNameBox()}
-                        {this.getChannelDetailHeadersJSX()}
-                        {this.getChannelDetailsJSXBox()}
-                    </div>
+                    {this.getGridJSX()}
                 </div>
                 <AdRail />
             </div>
         </div>;
     }
 
+}
+
+const mapDispatchToProps = dispatch => ({
+    updateChannelDetails: (payload) => dispatch(updateChannelDetails(payload))
+})
+
+const mapStateToProps = state => {
+    return {
+        channelDetails: state.solgressReducer.channelDetails
+    };
 }
 
 export default connect(mapStateToProps, mapDispatchToProps)(ChannelHome);

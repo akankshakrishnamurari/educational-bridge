@@ -47,7 +47,20 @@ class ChannelReceiver extends React.Component  {
 
     static upsertChannel = async(channelData) => {
         try {
-            let response = fetch(currentHost + 'channel?channel_name=' + channelData.channelName+'&channel_description=' + channelData.channelDescription, {
+            // Two fixes here.
+            //
+            // 1. The fetch was not awaited: the function returned "updated"
+            //    immediately, so the caller reported success before the request had
+            //    even been sent, and a rejected request produced an unhandled
+            //    promise rejection instead of an error. A failed create looked
+            //    identical to a successful one.
+            // 2. Values were concatenated straight into the query string. A channel
+            //    name containing & or # silently truncated the request, and one
+            //    containing a + arrived with spaces. encodeURIComponent fixes both.
+            const url = currentHost + 'channel'
+                + '?channel_name=' + encodeURIComponent(channelData.channelName || '')
+                + '&channel_description=' + encodeURIComponent(channelData.channelDescription || '');
+            const response = await fetch(url, {
                     method: 'POST',
                     headers: {
                         'Accept': 'application/json',
@@ -55,6 +68,9 @@ class ChannelReceiver extends React.Component  {
                     }
                 }
             );
+            if (!response.ok) {
+                return null;
+            }
             return "updated";
         } catch (e) {
             console.log(e);

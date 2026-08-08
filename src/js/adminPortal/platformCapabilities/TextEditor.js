@@ -1,51 +1,30 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { Editor } from '@tinymce/tinymce-react';
 import { generalTextSize } from '../../../constants/TextSizeConstants';
 import {JSXUtils} from "../../../utils/JSXUtils";
 
 
-// NOTE: We use editor from source (not a build)!
-
-const editorConfiguration = {
-    toolbar: {
-        items: [
-            'heading', '|',
-            'alignment', '|',
-            'bold', 'italic', 'strikethrough', 'underline', 'subscript', 'superscript', '|',
-            'link', '|',
-            'ChemType', 'MathType' |
-            'bulletedList', 'numberedList', 'todoList',
-            // '-', // break point
-            'fontfamily', 'fontsize', 'fontColor', 'fontBackgroundColor', '|',
-            'code', 'codeBlock', '|',
-            'insertTable', '|',
-            'outdent', 'indent', '|',
-            'uploadImage', 'blockQuote', '|',
-            'undo', 'redo',
-            'ckfinder'
-        ],
-        shouldNotGroupWhenFull: true
-    }
-};
+// A leftover CKEditor toolbar config used to sit here. It was never referenced --
+// this component renders TinyMCE, whose toolbar is configured inline below -- and
+// it contained the expression `'ChemType', 'MathType' | 'bulletedList', ...`, where
+// the `|` is a bitwise OR between two strings rather than the intended separator
+// string, evaluating to 0. Removed rather than repaired, since nothing read it.
 
 
 class TextEditor extends React.Component {
 
     constructor(props) {
         super(props)
-        this.state = {};
+        // Initialised here rather than in componentDidMount so the first render
+        // already has a mode. Previously state started empty, so the very first
+        // render fell through to the plain-textarea branch and then swapped to the
+        // rich editor a tick later, remounting TinyMCE for no reason.
+        this.state = {
+            isRichTextNeeded: props.defaultEditor !== 'simple-text',
+            isSideBySideViewNeeded: false,
+        };
         this.flipRichTextNeed = this.flipRichTextNeed.bind(this);
         this.flipSideBySideViewNeed = this.flipSideBySideViewNeed.bind(this);
-    }
-
-    componentDidMount(){
-        this.setState(
-            {
-                documentLoaded:true,
-                isRichTextNeeded:true,
-                isSideBySideViewNeeded: false
-            }
-        );
     }
 
     flipRichTextNeed = () => { 
@@ -159,41 +138,44 @@ class TextEditor extends React.Component {
         }
     }
 
+    // Toggles are real labelled checkboxes with onChange. They previously set
+    // `checked` with only an onClick handler, which React treats as a controlled
+    // input with no way to change -- it warns, and the checkbox fights the user.
     getEditorConfigurations = () => {
-        return <div className='flex flex-row bg-white py-1 justify-center rounded-xl'>
-            <div>
-                {this.state.isRichTextNeeded
-                    ?<input type='checkbox' checked onClick={this.flipRichTextNeed}/>
-                    :<input type='checkbox' onClick={this.flipRichTextNeed}/>
-                }
-            </div>
-            <div className={generalTextSize + " pl-1 pr-4"}>
-                Rich Text
-            </div>
-            <div>
-                {this.state.isSideBySideViewNeeded
-                    ?<input type='checkbox' checked onClick={this.flipSideBySideViewNeed}/>
-                    :<input type='checkbox' onClick={this.flipSideBySideViewNeed}/>
-                }
-            </div>
-            <div className={generalTextSize + " pl-1 pr-4"}>
-                Side Preview
-            </div>
+        const toggle = 'inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 cursor-pointer select-none';
+        return <div className='flex flex-row items-center gap-4 bg-white py-1.5 px-2 justify-end rounded-b-lg border-t border-gray-100'>
+            <label className={toggle}>
+                <input
+                    type='checkbox'
+                    className='accent-primary-600 w-3.5 h-3.5'
+                    checked={this.state.isRichTextNeeded}
+                    onChange={this.flipRichTextNeed}
+                />
+                Rich text
+            </label>
+            <label className={toggle}>
+                <input
+                    type='checkbox'
+                    className='accent-primary-600 w-3.5 h-3.5'
+                    checked={this.state.isSideBySideViewNeeded}
+                    onChange={this.flipSideBySideViewNeed}
+                />
+                Side preview
+            </label>
         </div>
     }
     render() {
-        if(this.props.defaultEditor=="simple-text") {
-            this.setState(
-                {
-                    documentLoaded:true,
-                    isRichTextNeeded:false,
-                    isSideBySideViewNeeded: false
-                }
-            );
-        }
+        // INFINITE LOOP FIXED.
+        //
+        // This method used to call this.setState() directly whenever
+        // `defaultEditor === "simple-text"`. setState during render schedules
+        // another render, which calls setState again, without end. The option
+        // editor passes exactly that prop, so opening an option for editing put the
+        // component into a render loop. The mode is now decided once in the
+        // constructor from the same prop.
         return (
-            <div className="">
-                {this.state.isRichTextNeeded ?this.getRichTextEditorJSX() : this.simpleTextEditorJSX()}
+            <div>
+                {this.state.isRichTextNeeded ? this.getRichTextEditorJSX() : this.simpleTextEditorJSX()}
             </div>
         );
     }

@@ -5,8 +5,6 @@ import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableRow from '@mui/material/TableRow';
-
-import Split from "react-split";
 import QuestionsReceiver from "../../../apis/QuestionsReceiver";
 import {MathUtils} from "../../../utils/MathUtils";
 import {PaperSubmissionUtil} from "../../../utils/PaperSubmissionUtil";
@@ -17,9 +15,14 @@ import NewPaperTagComponent from "./NewPaperTagComponent";
 import { currentURLHost } from '../../../constants/hostConfig';
 import {generalTextSize} from './../../../constants/TextSizeConstants';
 import EducationalBridgeHeader from '../../header/EducationalBridgeHeader';
-import {FcNext} from 'react-icons/fc';
-import {BsArrowRight, BsArrowLeft} from 'react-icons/bs';
+import ClipLoader from "react-spinners/ClipLoader";
+import notify from '../../../utils/notify';
 import Button from '../../../components/common/Button';
+import Stepper from '../../../components/common/Stepper';
+import ConfirmDialog from '../../../components/common/ConfirmDialog';
+import StatTile from '../../../components/common/StatTile';
+import FormField from '../../../components/common/FormField';
+import { typography, layout } from '../../../constants/designTokens';
 
 const mapDispatchToProps = dispatch => ({
     updateNewPaperDetails: (payload) => dispatch(updateNewPaperDetails(payload)),
@@ -39,21 +42,26 @@ class NewPaperPortal extends React.Component {
 
     constructor(props) {
         super(props);
+        this.state = { isConfirmingPublish: false, isPublishing: false };
         this.initializeNewPaperDetails = this.initializeNewPaperDetails.bind(this);
         this.getConfigurationSectionJSX = this.getConfigurationSectionJSX.bind(this);
     }
 
     initializeNewPaperDetails = () => {
+        // Defaults were "Sample Test Paper" and "Test Subject", which shipped
+        // straight through to published papers whenever an author did not think to
+        // overwrite them. The name now starts empty and is required before
+        // publishing; the subject falls back to a neutral "Section 1" grouping.
         let payload = {
             "currentTab" : 'TEST_SETTING',
             "numberOfQuestions":1,
-            "paperName" : "Sample Test Paper",
+            "paperName" : "",
             "allottedPaperTime":180,
             "containsMoreThanOneSubject":"false",
             "containsMoreThanOneSectionPerSubject":"false",
             "numberOfSubjects" : 1,
             "selectedQuestionIds" : [],
-            "subjectNames" : ["Test Subject"],
+            "subjectNames" : ["General"],
             "subjectWiseNumberOfSections" : [1],
             "subjectWiseSectionNames": [["Section 1"]],
             "subjectWiseSectionPositiveMarks": [[3]],
@@ -106,75 +114,30 @@ class NewPaperPortal extends React.Component {
         return questionSet;
     }
 
+    // Canonical step order. The old header inferred position from a chain of
+    // string comparisons in four places and carried a dead `stateName` variable
+    // plus an unrendered `percentageCompleted`.
+    static STEPS = [
+        { key: 'TEST_SETTING', label: 'Paper settings', hint: 'Name, timing, marking' },
+        { key: 'QUESTION_SELECTION', label: 'Choose questions', hint: 'Pick from the bank' },
+        { key: 'REVIEW_AND_PUBLISH', label: 'Review and publish', hint: 'Check, then publish' },
+    ];
+
+    getStepKey = () => {
+        // The selected-questions view is a sub-view of question selection, not a
+        // fourth step, so it maps onto the same stepper position.
+        const tab = this.props.newPaperDetails.currentTab;
+        return tab === 'QUESTION_SELECTION_SELECTED_QUESTION' ? 'QUESTION_SELECTION' : tab;
+    }
+
     getHeaderJSX = () => {
-        let stateName = "";
-        if(this.props.newPaperDetails.currentTab=='TEST_SETTING'){
-            stateName = " Paper Settings "
-        }
-        else if (this.props.newPaperDetails.currentTab=='QUESTION_SELECTION' || this.props.newPaperDetails.currentTab=='QUESTION_SELECTION_SELECTED_QUESTION') {
-            stateName = " Questions Selection "
-        }
-        else if ( this.props.newPaperDetails.currentTab=='QUESTION_SELECTION_SELECTED_QUESTION') {
-            stateName = " Questions Selection (Selected Questions)"
-        }
-        else {
-            stateName = " Preview/Publish "
-        }
-        let settingColor = (this.props.newPaperDetails.currentTab=='TEST_SETTING')?"bg-success-100":"bg-warning-50";
-        let questionSelectionColor = (this.props.newPaperDetails.currentTab=='QUESTION_SELECTION' || this.props.newPaperDetails.currentTab=='QUESTION_SELECTION_SELECTED_QUESTION')?"bg-success-100":"bg-warning-50";
-        let reviewAndPublishTabColor = (this.props.newPaperDetails.currentTab=='REVIEW_AND_PUBLISH')?"bg-success-100":"bg-warning-50";
-        let percentageCompleted = 0;
-        if(this.props.newPaperDetails.currentTab=='TEST_SETTING'){
-            percentageCompleted = 16;
-            settingColor = "bg-success-100";
-            questionSelectionColor = "bg-warning-50";
-            reviewAndPublishTabColor = "bg-warning-50"
-        }
-        else if (this.props.newPaperDetails.currentTab=='QUESTION_SELECTION' || this.props.newPaperDetails.currentTab=='QUESTION_SELECTION_SELECTED_QUESTION') {
-            percentageCompleted = 50;
-            settingColor = "bg-success-50";
-            questionSelectionColor = "bg-success-100";
-            reviewAndPublishTabColor = "bg-warning-50"
-        }
-        else {
-            percentageCompleted = 83;
-            settingColor = "bg-success-50";
-            questionSelectionColor = "bg-success-50";
-            reviewAndPublishTabColor = "bg-success-100"
-        }
-        return  <div>
-            <div className="flex items-center justify-between w-full bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div
-                    className="flex flex-col lg:flex-row w-full items-start lg:items-center">
-                    <div className={"w-full lg:w-1/3 py-3 px-4 cursor-pointer " + settingColor } onClick={()=>this.updateCurrentTab('TEST_SETTING')}>
-                        <div className={generalTextSize}>
-                            {(this.props.newPaperDetails.currentTab=='TEST_SETTING')?<b>Paper Settings</b>:'Test Settings'}
-                        </div>
-                    </div>
-                    <div className='flex flex-row items-center px-1 text-gray-400'  onClick={()=>this.updateCurrentTab('QUESTION_SELECTION')}>
-                        <FcNext/>
-                    </div>
-                    <div className={"w-full lg:w-1/3 py-3 px-4 cursor-pointer " + questionSelectionColor } onClick={()=>this.updateCurrentTab('QUESTION_SELECTION')}>
-                        <p className={generalTextSize}>
-                            {
-                                (this.props.newPaperDetails.currentTab=='QUESTION_SELECTION' 
-                                    || this.props.newPaperDetails.currentTab== 'QUESTION_SELECTION_SELECTED_QUESTION')
-                                    ?(this.props.newPaperDetails.currentTab== 'QUESTION_SELECTION_SELECTED_QUESTION'?<b>Selected Questions</b>:<b>Questions Selection</b>)
-                                    :'Questions Selection'}
-                        </p>
-                    </div>
-                    <div className='flex flex-row items-center px-1 text-gray-400'  onClick={()=>this.updateCurrentTab('REVIEW_AND_PUBLISH')}>
-                        <FcNext/>
-                    </div>
-                    <div
-                        className={"w-full lg:w-1/3 py-3 px-4 cursor-pointer " + reviewAndPublishTabColor} onClick={()=>this.updateCurrentTab('REVIEW_AND_PUBLISH')}>
-                        <p className={generalTextSize}>
-                            {(this.props.newPaperDetails.currentTab=='REVIEW_AND_PUBLISH')?<b>Preview and publish</b>:'Preview and publish'}
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
+        return <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-2">
+            <Stepper
+                steps={NewPaperPortal.STEPS}
+                currentKey={this.getStepKey()}
+                onSelect={this.updateCurrentTab}
+            />
+        </div>;
     }
 
     getNumberofSubjectsInputJSX = () => {
@@ -481,7 +444,8 @@ class NewPaperPortal extends React.Component {
         let subjectWiseSectionNegativeMarks = [...payload.subjectWiseSectionNegativeMarks];
         let subjectWiseSectionWiseNumberOfQuestions = [...payload.subjectWiseSectionWiseNumberOfQuestions];
         for(let index=payload.subjectNames.length; index <= payload.numberOfSubjects; index++) {
-            subjectNames.push('Test Subject' + index);
+            // Was 'Test Subject' + index.
+            subjectNames.push('Subject ' + (index + 1));
             subjectWiseNumberOfSections.push(1);
             subjectWiseSectionNames.push(['Section 1']);
             subjectWiseSectionWiseNumberOfQuestions.push([0]);
@@ -647,126 +611,108 @@ class NewPaperPortal extends React.Component {
         return <div/>;
     }
 
-    geTestDetailsConfiguration = () => {
-        return <div className="overflow-y-auto ...">
-            <div className={"w-full lg:w-1/3 py-3 bg-gray-100" }>
-                <p className={generalTextSize}>
-                    <b>Part A : Configure Basic Details</b>
-                </p>
-            </div>
-            <div className="flex flex-row ... px-5 py-1">
-                <div>
-                    <div className={generalTextSize + " leading-tight text-gray-800  py-1"}>
-                        Name of Paper
-                    </div>
-                </div>
-                <input autoComplete="off"
-                    className={generalTextSize +" resize mx-2 text-gray-600  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-700  bg-white font-normal h-10 flex items-center pl-3 border-gray-300 rounded border shadow"}
-                    placeholder="Name of paper"
-                    value = {this.props.newPaperDetails.paperName}
-                    onChange={(event)=>this.updatePaperName(event.target.value)}
-                />
-            </div>
-            <div className="flex flex-row ... px-5 py-1">
-                <div>
-                    <div className={generalTextSize + " leading-tight text-gray-800 py-1 pr-2"}>
-                        Allotted Paper Time (in minutes)
-                    </div>
-                </div>
-                <input autoComplete="off"
-                    className={generalTextSize + " text-gray-600  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-700    bg-white font-normal py-2 flex items-center pl-3  border-gray-300 rounded border shadow"}
-                    placeholder="Maximum allotted time"
-                    value = {this.props.newPaperDetails.allottedPaperTime}
-                    onChange={(event)=>this.updateAllottedPaperTime(event.target.value)}
-                />
-            </div>
-            <div className="flex flex-row ... px-5 py-1">
-                <div>
-                    <div className={generalTextSize + " leading-tight text-gray-800  py-2"}>
-                        Number of Questions 
-                    </div>
-                </div>
-                { (this.props.newPaperDetails.containsMoreThanOneSubject === 'false')
-                    ?<input autoComplete="off"
-                        className={generalTextSize + " resize mx-2 text-gray-600  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-700    bg-white font-normal w-64 h-10 flex items-center pl-3 border-gray-300 rounded border shadow"}
-                        placeholder="Number of questions in test"
-                        value = {this.props.newPaperDetails.numberOfQuestions}
-                        onChange={(event)=>this.updateNumberOfQuestions(event.target.value)}
-                    />
-                    :<input autoComplete="off"
-                        className={generalTextSize + " resize mx-2 bg-gray-200 text-gray-600  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-700    bg-white font-normal w-64 h-10 flex items-center pl-3 border-gray-300 rounded border shadow"}
-                        placeholder="Number of questions in test"
-                        value = {this.props.newPaperDetails.numberOfQuestions}
-                        onChange={(event)=>this.updateNumberOfQuestions(event.target.value)}
-                        disabled
-                    />
-                }
-            </div>
-            <div className="flex flex-row ... px-5 py-1">
-                <div className='pr-2'>
-                    <div className={generalTextSize + " leading-tight text-gray-800  py-2"}>
-                        More than one subject ?
-                    </div>
-                </div>
-                <select className={generalTextSize + " w-fit border bg-white rounded px-3 py-2 outline-none w-20"}
-                    value={this.props.newPaperDetails.containsMoreThanOneSubject}
-                    onChange={(event => this.updateContainsMoreThanOneSubject(event))}
-                >
-                    <option className={"py-1 " + generalTextSize} value="false">No</option>
-                    <option className={"py-1 " + generalTextSize} value="true">Yes</option>
-                </select>
-            </div>
-            {/* Disabling for some time to hide complexity */}
-            {/* <div className="flex flex-row ... px-5 py-5">
-                <div>
-                    <div className="text-lg leading-tight text-gray-800  py-2">
-                        More than one section per subject ? :
-                    </div>
-                </div>
-                <select className="w-full border bg-white rounded px-5 py-2 outline-none w-20" onChange={(event => this.updateContainsMoreThanOneSectionPerSubject(event))}>
-                    <option className="py-1" value="false">No</option>
-                    <option className="py-1" value="true">Yes</option>
-                </select>
-            </div> */}
-            {this.getSubjectNameAndNumberOfSectionsInputJSX()}
-            <div className={"w-full lg:w-1/3 py-3 bg-gray-100" }>
-                <p className={generalTextSize}>
-                    <b>Part B : Configure question grouping</b>
-                </p>
-            </div>
-            <div className="flex  flex-row... px-5 py-5">
-                {this.getSubjectwiseNumberOfSectionsJSX()}
-            </div>
-            <div className={"w-full lg:w-1/3 py-3 bg-gray-100" }>
-                <p className={generalTextSize}>
-                    <b>Part C : Configure marking system</b>
-                </p>
-            </div>
-            <div className="flex  flex-row... px-5 py-5">
-                {this.getMarkingSystemConfigurationJSX()}
-            </div>
-            <div className={"w-full lg:w-1/3 py-3 bg-gray-100" }>
-                <p className={generalTextSize}>
-                    <b>Part D : Paper Tags</b>
-                </p>
-            </div>
-            <div className="flex  flex-row... px-5 py-5">
-                <NewPaperTagComponent/>
-            </div>
-        </div>;
-    }
+    // Section heading. Replaces the "Part A / Part B / Part C / Part D" grey bars,
+    // which were each rendered at `lg:w-1/3` width so they ran a third of the way
+    // across the page and looked like truncated tabs.
+    sectionHeading = (title, description) => (
+        <div className="mb-4">
+            <h2 className={typography.h3}>{title}</h2>
+            {description &&
+                <p className="mt-1 text-xs text-gray-500 leading-relaxed max-w-prose">{description}</p>
+            }
+        </div>
+    )
 
-    getQuestionFilteringJSX = () => {
-        return  <div class="container flex px-4 py-4 sm:px-6 lg:px-8">
-                                <input 
-                                    type="text" 
-                                    class="resize  bg-gray-200 h-10 w-7/12 pr-8 pl-5 rounded z-0 focus:shadow focus:outline-none" 
-                                    placeholder="Search questions or options"
-                                    // value = {this.props.newQuestionDetails.searchedTagKey}
-                                    // onChange={(event)=>this.updateSearchedTagKey(event)}
-                                    // onClick = {this.activateTagSearch}
-                                />
+    geTestDetailsConfiguration = () => {
+        const details = this.props.newPaperDetails;
+        const isMultiSubject = details.containsMoreThanOneSubject === 'true';
+        return <div className="flex flex-col gap-6">
+            <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 md:p-7">
+                {this.sectionHeading('Basics', 'How the paper is presented to learners and how long they get.')}
+                <div className="grid sm:grid-cols-2 gap-5">
+                    <FormField label="Paper name" required className="sm:col-span-2">
+                        {(fieldProps) => (
+                            <input
+                                {...fieldProps}
+                                autoComplete="off"
+                                placeholder="e.g. JEE Main 2024 Full Mock 1"
+                                value={details.paperName}
+                                onChange={(event)=>this.updatePaperName(event.target.value)}
+                            />
+                        )}
+                    </FormField>
+                    <FormField label="Time allowed" help="In minutes.">
+                        {(fieldProps) => (
+                            <input
+                                {...fieldProps}
+                                type="number"
+                                min="1"
+                                autoComplete="off"
+                                placeholder="180"
+                                value={details.allottedPaperTime}
+                                onChange={(event)=>this.updateAllottedPaperTime(event.target.value)}
+                            />
+                        )}
+                    </FormField>
+                    <FormField
+                        label="Questions"
+                        help={isMultiSubject
+                            ? 'Totalled from the sections below.'
+                            : 'How many questions this paper should contain.'}
+                    >
+                        {(fieldProps) => (
+                            <input
+                                {...fieldProps}
+                                type="number"
+                                min="0"
+                                autoComplete="off"
+                                placeholder="30"
+                                value={details.numberOfQuestions}
+                                onChange={(event)=>this.updateNumberOfQuestions(event.target.value)}
+                                disabled={isMultiSubject}
+                            />
+                        )}
+                    </FormField>
+                    <FormField
+                        label="Multiple subjects"
+                        help="Turn on for a paper split across subjects, like Physics, Chemistry and Maths."
+                        className="sm:col-span-2"
+                    >
+                        {(fieldProps) => (
+                            <select
+                                {...fieldProps}
+                                className={fieldProps.className + ' w-auto'}
+                                value={details.containsMoreThanOneSubject}
+                                onChange={(event => this.updateContainsMoreThanOneSubject(event))}
+                            >
+                                <option value="false">No, one subject</option>
+                                <option value="true">Yes, several subjects</option>
+                            </select>
+                        )}
+                    </FormField>
                 </div>
+                {isMultiSubject &&
+                    <div className="mt-5 pt-5 border-t border-gray-100">
+                        {this.getSubjectNameAndNumberOfSectionsInputJSX()}
+                    </div>
+                }
+            </section>
+
+            <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 md:p-7">
+                {this.sectionHeading('Structure', 'How many questions sit in each section.')}
+                {this.getSubjectwiseNumberOfSectionsJSX()}
+            </section>
+
+            <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 md:p-7">
+                {this.sectionHeading('Marking', 'Marks awarded for a correct answer and deducted for a wrong one.')}
+                {this.getMarkingSystemConfigurationJSX()}
+            </section>
+
+            <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 md:p-7">
+                {this.sectionHeading('Tags', 'Help learners find this paper.')}
+                <NewPaperTagComponent/>
+            </section>
+        </div>;
     }
 
     getConfigurationSectionJSX = () => {
@@ -804,38 +750,122 @@ class NewPaperPortal extends React.Component {
         }
     }
 
-    showQuestionPagingSection = () => {
-        return <div>
-            <div className="flex items-center justify-center py-4 px-4 md:px-10 bg-white rounded-xl shadow-sm border border-gray-100 mt-4">
-                <div className="w-full flex items-center justify-between">
-                    <div className='flex grow'>
-                        <div className='flex flex-row justify-center w-full'>
-                            <button className="flex items-center py-1 px-3 text-primary-600 hover:text-primary-800 transition-colors" onClick={this.moveToPreviousQuestion}>
-                                <BsArrowLeft size={18}/>
-                                <span className={generalTextSize + " ml-1 font-medium"}>
-                                    Save and Previous
-                                </span>
-                            </button>
-                            <button className="flex items-center py-1 px-3 text-primary-600 hover:text-primary-800 transition-colors" onClick={this.moveToNextQuestion}>
-                                <span className={generalTextSize + " font-medium mr-1"}>
-                                    Save and Next
-                                </span>
-                                <BsArrowRight size={18}/>
-                            </button>
-                        </div>
-                    </div>
-                    <Button variant="primary" onClick={() => this.submitPaper()}>
-                        Submit Paper
+    /**
+     * Wizard navigation, pinned to the viewport.
+     *
+     * Publish is now available ONLY on the final step. Previously "Submit Paper"
+     * sat beside Back/Next on every step, so a paper could be published from step
+     * one with no questions selected and no name -- and it would then appear in the
+     * public papers list.
+     */
+    getWizardBarJSX = () => {
+        const stepKey = this.getStepKey();
+        const stepIndex = NewPaperPortal.STEPS.findIndex((step) => step.key === stepKey);
+        const isFirst = stepIndex <= 0;
+        const isLast = stepIndex >= NewPaperPortal.STEPS.length - 1;
+        const selectedCount = (this.props.newPaperDetails.selectedQuestionIds || []).length;
+
+        return <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-gray-200">
+            <div className={layout.container + ' py-3 flex items-center justify-between gap-3'}>
+                <Button variant="secondary" onClick={this.moveToPreviousQuestion} disabled={isFirst}>
+                    <span aria-hidden="true">&larr;</span>
+                    <span className="hidden sm:inline">Back</span>
+                </Button>
+                <p className="text-xs sm:text-sm text-gray-500 tabular-nums text-center min-w-0 truncate">
+                    {selectedCount} {selectedCount === 1 ? 'question' : 'questions'} selected
+                </p>
+                {isLast
+                    ? <Button
+                        variant="primary"
+                        onClick={() => this.setState({ isConfirmingPublish: true })}
+                        disabled={this.state.isPublishing === true}
+                    >
+                        Publish paper
                     </Button>
-                </div>
+                    : <Button variant="primary" onClick={this.moveToNextQuestion}>
+                        <span className="hidden sm:inline">Next</span>
+                        <span aria-hidden="true">&rarr;</span>
+                    </Button>
+                }
             </div>
         </div>;
     }
 
+    /** Blocking problems that would produce an unusable published paper. */
+    getPublishBlockers = () => {
+        const details = this.props.newPaperDetails;
+        const blockers = [];
+        if (!details.paperName || details.paperName.trim().length === 0) {
+            blockers.push('The paper needs a name.');
+        }
+        if ((details.selectedQuestionIds || []).length === 0) {
+            blockers.push('No questions have been selected.');
+        }
+        if (!(Number(details.allottedPaperTime) > 0)) {
+            blockers.push('Set how long learners get, in minutes.');
+        }
+        return blockers;
+    }
+
+    getPublishDialogJSX = () => {
+        if (this.state.isConfirmingPublish !== true) {
+            return null;
+        }
+        const details = this.props.newPaperDetails;
+        const blockers = this.getPublishBlockers();
+        const selectedCount = (details.selectedQuestionIds || []).length;
+
+        if (blockers.length > 0) {
+            return <ConfirmDialog
+                title="Not ready to publish"
+                description="These need attention first."
+                confirmLabel="Back to editing"
+                cancelLabel="Close"
+                onConfirm={() => this.setState({ isConfirmingPublish: false })}
+                onCancel={() => this.setState({ isConfirmingPublish: false })}
+            >
+                <ul className="flex flex-col gap-1 list-disc list-inside">
+                    {blockers.map((blocker) => (
+                        <li key={blocker} className="text-sm text-danger-700">{blocker}</li>
+                    ))}
+                </ul>
+            </ConfirmDialog>;
+        }
+
+        return <ConfirmDialog
+            title="Publish this paper?"
+            description="It becomes available to every learner on the platform."
+            confirmLabel="Publish"
+            cancelLabel="Keep editing"
+            isBusy={this.state.isPublishing === true}
+            onCancel={() => this.setState({ isConfirmingPublish: false })}
+            onConfirm={this.submitPaper}
+        >
+            <dl className="grid grid-cols-2 gap-2">
+                <StatTile label="Questions" value={selectedCount} />
+                <StatTile label="Time" value={details.allottedPaperTime + ' min'} />
+            </dl>
+        </ConfirmDialog>;
+    }
+
     submitPaper = async () => {
-        await PaperSubmissionUtil.submitPaper(this.props.newPaperDetails);
-        window.sessionStorage.setItem("createdByMe",  true);
-        window.location.href = currentURLHost + "papers";
+        this.setState({ isPublishing: true });
+        try {
+            await PaperSubmissionUtil.submitPaper(this.props.newPaperDetails);
+            window.sessionStorage.setItem("createdByMe",  true);
+            window.location.href = currentURLHost + "papers";
+        } catch (err) {
+            notify.error('Could not publish the paper. Please try again.');
+            this.setState({ isPublishing: false, isConfirmingPublish: false });
+        }
+    }
+
+    componentDidMount() {
+        // Was called from render(), which dispatched a redux update mid-render on
+        // first paint.
+        if(this.props.newPaperDetails===undefined || Object.keys(this.props.newPaperDetails).length === 0) {
+            this.initializeNewPaperDetails();
+        }
     }
 
     render() {
@@ -843,24 +873,47 @@ class NewPaperPortal extends React.Component {
             return <div/>;
         }
         if(this.props.newPaperDetails===undefined || Object.keys(this.props.newPaperDetails).length === 0) {
-            this.initializeNewPaperDetails();
-            return <div/>;
+            return <div className="bg-gray-50 min-h-screen">
+                <EducationalBridgeHeader/>
+                <div className='flex justify-center py-20'>
+                    <ClipLoader color="#2563EB" size="60"/>
+                </div>
+            </div>;
         }
         return (
-            <div className="bg-gray-50 min-h-screen">
+            <div className="bg-gray-50 min-h-screen pb-24">
                 <EducationalBridgeHeader/>
-                <div className="flex flex-col md:flex-row px-4 md:px-6 py-6 gap-4">
-                    <div className="w-full md:w-80 xl:w-96 bg-white rounded-xl shadow-sm border border-gray-100">
+                <div className={layout.container + ' py-6'}>
+                    <a
+                        href={currentURLHost + 'papers'}
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 transition-colors"
+                    >
+                        <span aria-hidden="true">&larr;</span>
+                        All papers
+                    </a>
+                    <h1 className={typography.h1 + ' mt-3'}>Build a paper</h1>
+                    <p className="mt-1 text-sm text-gray-500 max-w-2xl">
+                        Assemble a timed paper from questions in the bank. Learners get a full
+                        score report with a topic breakdown when they finish.
+                    </p>
+
+                    <div className="mt-6">
+                        {this.getHeaderJSX()}
+                    </div>
+
+                    {/* The help panel used to occupy a permanent 384px column on the
+                        left of every step, pushing the actual work into a narrow
+                        remainder. It now sits below the content where it is available
+                        without competing with the form. */}
+                    <div className="mt-5">
+                        {this.getConfigurationSectionJSX()}
+                    </div>
+                    <div className="mt-5 bg-white rounded-xl shadow-sm border border-gray-100">
                         <PaperCreationHelpSectionComponent/>
                     </div>
-                    <div className='grow'>
-                        {this.getHeaderJSX()}
-                        <div className="mt-4">
-                            {this.getConfigurationSectionJSX()}
-                        </div>
-                        {this.showQuestionPagingSection()}
-                    </div>
                 </div>
+                {this.getWizardBarJSX()}
+                {this.getPublishDialogJSX()}
             </div>
         );
     }

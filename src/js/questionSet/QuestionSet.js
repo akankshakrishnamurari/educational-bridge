@@ -60,6 +60,19 @@ class QuestionSet extends React.Component {
         window.sessionStorage.setItem('createdByMe',"false");
     }
 
+    /**
+     * Channel filter taken from the URL, so a link from the channels directory
+     * narrows the list. Returns an empty array when absent, which the connector
+     * serialises to an empty `channel_ids` param exactly as before.
+     */
+    getChannelIdsFromUrl = () => {
+        if (typeof window === 'undefined') {
+            return [];
+        }
+        const channelId = new URLSearchParams(window.location.search).get('channel_id');
+        return channelId == null || channelId === '' ? [] : [channelId];
+    }
+
     initializeQuestions = async () => {
         let tags = await this.getPreDecidedTags();
         const search = window.location.search;
@@ -76,7 +89,12 @@ class QuestionSet extends React.Component {
         if(typeof this.props.generalInfo != "undefined") {
             searchText = this.props.generalInfo.searchText;
         }
-        await QuestionsReceiver.getAllFilteredQuestions(searchText, tagIds, [], 0, 10).then(paperData=>{
+        // The channels page links here as `questions?channel_id=<id>`, but this
+        // page never read that parameter and always sent an empty channel filter,
+        // so every one of those links silently showed the unfiltered list. The API
+        // has supported `channel_ids` all along.
+        const channelIds = this.getChannelIdsFromUrl();
+        await QuestionsReceiver.getAllFilteredQuestions(searchText, tagIds, channelIds, 0, 10).then(paperData=>{
             let payload = {};
             payload.tags = tags;
             payload.suggestedTags = [];
@@ -377,7 +395,9 @@ class QuestionSet extends React.Component {
         QuestionsReceiver.getAllFilteredQuestions(
             this.props.questionSet.searchedKey,
              tagIds,
-             [],
+             // Paging must keep the channel filter, otherwise page 2 of a channel
+             // silently widens to every question on the platform.
+             this.getChannelIdsFromUrl(),
              updatedPageNumber,
              updatedPageSize
         ).then(questionsData=>{

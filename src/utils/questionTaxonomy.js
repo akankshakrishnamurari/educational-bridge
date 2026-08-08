@@ -56,7 +56,7 @@ const SEPARATOR = ' : ';
  * legitimate value, because the importer passes paperTitle through unmodified.
  * Returns null when the tag carries no recognisable prefix.
  */
-const splitTagName = (tagName) => {
+export const splitTagName = (tagName) => {
     if (typeof tagName !== 'string') {
         return null;
     }
@@ -223,6 +223,58 @@ export const parseQuestionTaxonomy = (tags) => {
     parsed.breadcrumb = [parsed.subject, parsed.chapter, parsed.topic].filter(Boolean);
 
     return parsed;
+};
+
+/**
+ * Map a flat list of tags to `{ [tagId]: { subject, topic, chapter, label } }`.
+ *
+ * The paper analytics are keyed by tag id (`tagIdToCandidateScoreAnalysis`), but a
+ * tag id is meaningless to a learner. This resolves ids back to readable names by
+ * walking the tags attached to the paper's own questions.
+ *
+ * @param {Array<{id, tags: Array}>} questions questions carrying `tags`
+ */
+export const buildTagIdLabelMap = (questions) => {
+    const map = {};
+    if (!Array.isArray(questions)) {
+        return map;
+    }
+    // Subject is recorded per question rather than per tag, so it is captured
+    // alongside each topic/chapter tag found on the same question. That is what
+    // lets a topic render as "Physics · Kinematics" instead of a bare topic name.
+    questions.forEach((question) => {
+        if (!question || !Array.isArray(question.tags)) {
+            return;
+        }
+        let subject = null;
+        question.tags.forEach((tag) => {
+            const split = tag && typeof tag.tagName === 'string' ? splitTagName(tag.tagName) : null;
+            if (split && split[0].toLowerCase() === 'subject') {
+                subject = displayLabel(split[1]);
+            }
+        });
+        question.tags.forEach((tag) => {
+            if (!tag || typeof tag.tagName !== 'string' || !tag.id) {
+                return;
+            }
+            const split = splitTagName(tag.tagName);
+            if (split === null) {
+                return;
+            }
+            const prefix = split[0].toLowerCase();
+            if (prefix !== 'topic' && prefix !== 'chapter') {
+                return;
+            }
+            const value = displayLabel(split[1]);
+            map[tag.id] = {
+                kind: prefix,
+                subject,
+                name: value,
+                label: subject ? subject + ' · ' + value : value,
+            };
+        });
+    });
+    return map;
 };
 
 /**
