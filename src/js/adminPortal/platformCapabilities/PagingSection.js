@@ -267,7 +267,13 @@ class PagingSection extends React.Component {
         // `relative`, with the message absolutely placed: the nav row is
         // `items-center`, so a message that took part in layout would grow this cell
         // and shunt the page buttons upward the moment a bad number was entered.
-        return <div className='relative flex items-center'>
+        //
+        // Hidden below `lg`. Measured at every breakpoint: the page-size select, the
+        // numbered pager and this form together need about 800px of content width,
+        // so between 768 and 1023 this was pushing the row past the right edge of the
+        // list card. Direct entry is the least essential of the three — every page is
+        // still reachable — so it is the one that goes.
+        return <div className='relative hidden lg:flex items-center'>
             {/* `noValidate`, and a text input rather than `type="number"` with
                 min/max.
                 WHY: the first version used a number input bounded by min="1"
@@ -345,9 +351,13 @@ class PagingSection extends React.Component {
             {this.getPageSizeSelectorJSX()}
 
             <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5'>
-                {/* Full pager from `sm` up. Below that there is no room for eight
-                    buttons beside a select, so the compact form takes over. */}
-                <div className='hidden sm:flex items-center gap-1.5'>
+                {/* Numbered pager from `md` up, compact Prev/Next below it.
+                    The switch was at `sm` (640px) first, which was too early: nine
+                    buttons plus the page-size select need roughly 620px of content
+                    width, and at 640px the card only offers about 590px, so the row
+                    ran past the card's right edge and gave the whole page a
+                    horizontal scrollbar. */}
+                <div className='hidden md:flex items-center gap-1.5'>
                     {this.getNavButtonJSX('previous')}
                     <div className='flex items-center gap-1.5 px-1'>
                         {this.getPageButtonsJSX()}
@@ -355,7 +365,11 @@ class PagingSection extends React.Component {
                     {this.getNavButtonJSX('next')}
                 </div>
 
-                <div className='flex sm:hidden items-center justify-between gap-3'>
+                {/* Below `md` the page numbers are replaced by a position readout.
+                    Prev/Next stay, because stepping is the only thing there is room
+                    for, and without the readout there would be nothing on the page
+                    saying where you are. */}
+                <div className='flex md:hidden items-center justify-between gap-3'>
                     {this.getNavButtonJSX('previous')}
                     <span className='text-sm text-gray-500 tabular-nums whitespace-nowrap'>
                         Page <span className='font-semibold text-gray-800'>{currentPage}</span> of {pageCount}
