@@ -243,9 +243,20 @@ class PagingSection extends React.Component {
             aria-label={isPrevious ? 'Previous page' : 'Next page'}
             onClick={(event) => this.goToPage(event, target)}
         >
+            {/* The word is dropped below `sm`, leaving the arrow.
+                Not a style preference — a measurement. Below `sm` the pager is the
+                readout row, and "Previous" + "Page 476 of 476" + "Next" comes to
+                about 297px of content. A 320px phone offers 288px inside the page
+                gutter, and 254px once the control sits in a card with its own
+                padding, as it does in the paper builder's question picker. Keeping
+                the labels there pushed the document wider than the window.
+                Tuning the gaps instead would leave single-digit slack that the
+                readout eats as soon as the page number reaches three digits, so the
+                labels go. `aria-label` on the button already carries the full name,
+                so nothing is lost to a screen reader. */}
             {isPrevious
-                ? <><AiOutlineLeft size={12} aria-hidden="true" /><span>Previous</span></>
-                : <><span>Next</span><AiOutlineRight size={12} aria-hidden="true" /></>}
+                ? <><AiOutlineLeft size={12} aria-hidden="true" /><span className='hidden sm:inline'>Previous</span></>
+                : <><span className='hidden sm:inline'>Next</span><AiOutlineRight size={12} aria-hidden="true" /></>}
         </button>;
     }
 
@@ -256,7 +267,7 @@ class PagingSection extends React.Component {
      */
     getJumpFormJSX = () => {
         const pageCount = this.getPageCount();
-        if (pageCount <= 12) {
+        if (pageCount <= 12 || this.props.compact) {
             return null;
         }
         const inputId = this.instanceId + '-jump';
@@ -339,6 +350,21 @@ class PagingSection extends React.Component {
             return null;
         }
         const currentPage = this.getCurrentPage();
+
+        // `compact` exists because this component's responsive breakpoints are
+        // viewport-based while its real constraint is the width of whatever column it
+        // has been dropped into. Those are the same thing on the question and paper
+        // lists, which give the pager the full content width — and they are not the
+        // same thing in the paper builder, where the question picker occupies a 7/12
+        // grid column, about 650px at a 1280px viewport. There, every `md:` and `lg:`
+        // test passes while the space available is closer to what a phone has, so the
+        // full pager was laid out in a column that could not hold it and pushed the
+        // document 125px wider than the window.
+        //
+        // Tailwind 3.3 has no container queries without a plugin, so the container has
+        // to say what it can afford rather than the pager guessing from the viewport.
+        const isCompact = this.props.compact === true;
+
         // Two groups, not three: how much to show on the left, where to go on the
         // right. The jump box sits with the page buttons because it does the same
         // job as them; spread as a third column it wrapped onto its own line at
@@ -356,19 +382,30 @@ class PagingSection extends React.Component {
                     width, and at 640px the card only offers about 590px, so the row
                     ran past the card's right edge and gave the whole page a
                     horizontal scrollbar. */}
-                <div className='hidden md:flex items-center gap-1.5'>
-                    {this.getNavButtonJSX('previous')}
-                    <div className='flex items-center gap-1.5 px-1'>
-                        {this.getPageButtonsJSX()}
+                {isCompact ? null : (
+                    <div className='hidden md:flex items-center gap-1.5'>
+                        {this.getNavButtonJSX('previous')}
+                        <div className='flex items-center gap-1.5 px-1'>
+                            {this.getPageButtonsJSX()}
+                        </div>
+                        {this.getNavButtonJSX('next')}
                     </div>
-                    {this.getNavButtonJSX('next')}
-                </div>
+                )}
 
                 {/* Below `md` the page numbers are replaced by a position readout.
                     Prev/Next stay, because stepping is the only thing there is room
                     for, and without the readout there would be nothing on the page
-                    saying where you are. */}
-                <div className='flex md:hidden items-center justify-between gap-3'>
+                    saying where you are.
+                    In compact mode this is the only pager, at every width, so the
+                    `md:hidden` that would otherwise hide it has to come off — hence
+                    two mutually exclusive strings rather than one string with a
+                    conditional fragment. Tailwind runs with `important: true`, so
+                    `flex` and `hidden` in the same className resolve by stylesheet
+                    order, not by which was written last. */}
+                <div className={isCompact
+                    ? 'flex items-center justify-between gap-3'
+                    : 'flex md:hidden items-center justify-between gap-3'}
+                >
                     {this.getNavButtonJSX('previous')}
                     <span className='text-sm text-gray-500 tabular-nums whitespace-nowrap'>
                         Page <span className='font-semibold text-gray-800'>{currentPage}</span> of {pageCount}

@@ -65,6 +65,15 @@ rendered through `MathContent`, which sanitises with DOMPurify and typesets
 `$$...$$` LaTeX with KaTeX. Never pass API HTML to `dangerouslySetInnerHTML`
 directly.
 
+Authoring goes through `MathEditor`, which writes that same format and previews it
+by calling `MathContent` — so the preview is the student's render, not an
+approximation of it. Its toolbar deliberately offers only tags and attributes that
+survive the sanitiser's allowlist. Adding a control that emits anything else
+(inline `style`, for instance, which is on `FORBID_ATTR`) produces a button that
+appears to work in the editor and silently does nothing once published. Validation
+messages come from `findMathErrors`, which lives beside `renderMath` so the two
+cannot disagree about what parses.
+
 Question metadata (subject, chapter, topic, difficulty, year, exam) does not
 exist as fields. It lives only in `tags[]` as `"<Prefix> : <Value>"` strings.
 Parse it with `src/utils/questionTaxonomy.js`; do not re-implement the split.
@@ -78,6 +87,19 @@ silently kills standard classes like `max-w-7xl`, `min-w-0` and `z-50`.
 `important: true` is set globally, so conflicting utilities resolve by stylesheet
 order rather than authoring order. Write mutually exclusive conditional class
 strings; do not rely on a later class overriding an earlier one.
+
+Responsive prefixes measure the **viewport**, not the element's container. A
+component whose breakpoints assume it owns the full content width will lay itself
+out wrongly the first time it is dropped into a grid column, and every `md:` and
+`lg:` test will still pass while it overflows. This has already happened twice
+with `PagingSection`: once on the question list between 768 and 1023px, and again
+inside the paper builder's 7/12 column, where a 1280px viewport leaves the pager
+about 650px. There are no container queries in Tailwind 3.3 without a plugin, so
+a component that can be reused in a narrow column needs a prop (`compact` on
+`PagingSection`) letting the parent state what it can afford. Verify by measuring
+`document.documentElement.scrollWidth` against `clientWidth` at a range of widths;
+an element wider than the viewport is the bug, and the deepest such element is the
+cause.
 
 Tailwind scans these files as **plain text**, with no understanding of JavaScript.
 Two consequences:

@@ -1,7 +1,7 @@
 import React from 'react';
 import { connect } from 'react-redux';
 import {updateNewQuestionDetails} from '../../../store/actions/solgressAction'
-import TextEditor from "../platformCapabilities/TextEditor";
+import MathEditor from "../../../components/common/MathEditor";
 import MathContent from '../../../components/common/MathContent';
 import Button from '../../../components/common/Button';
 import { typography } from '../../../constants/designTokens';
@@ -112,10 +112,13 @@ class SingleSelectMCQEditor extends React.Component {
                 <span className="text-xs text-gray-400">Required</span>
             </div>
             <div className="rounded-lg border border-gray-200 overflow-hidden">
-                <TextEditor
-                    editorRef={this.props.editorRef}
+                <MathEditor
+                    id="question-body-editor"
+                    label="Question"
                     onChange={this.updateQuestionDetails}
-                    data={this.props.newQuestionDetails.questionDescription || ''}
+                    value={this.props.newQuestionDetails.questionDescription || ''}
+                    placeholder={'State the question. Maths goes between $$ marks, '
+                        + 'e.g. $$\\int_0^1 x^2 \\, dx$$'}
                 />
             </div>
         </section>
@@ -189,10 +192,13 @@ class SingleSelectMCQEditor extends React.Component {
 
                 {isEditing &&
                     <div className="border-t border-gray-200">
-                        <TextEditor
-                            editorRef={this.props.editorRef}
+                        <MathEditor
+                            id={`option-editor-${index}`}
+                            label={'Option ' + optionLetter(index)}
                             onChange={(data) => this.saveOptionData(index, data)}
-                            data={option.text || ''}
+                            value={option.text || ''}
+                            minHeight="8rem"
+                            placeholder={'Option ' + optionLetter(index)}
                         />
                     </div>
                 }
@@ -242,10 +248,12 @@ class SingleSelectMCQEditor extends React.Component {
                 tells someone they were wrong without telling them why.
             </p>
             <div className="rounded-lg border border-gray-200 overflow-hidden">
-                <TextEditor
-                    editorRef={this.props.editorRef}
+                <MathEditor
+                    id="answer-description-editor"
+                    label="Solution"
                     onChange={this.updateAnswerDetails}
-                    data={this.props.newQuestionDetails.answerDescription || ''}
+                    value={this.props.newQuestionDetails.answerDescription || ''}
+                    placeholder="Explain how to get to the answer, step by step."
                 />
             </div>
         </section>

@@ -2,7 +2,7 @@ import React from 'react';
 import {AiOutlineLike, AiOutlineDislike, AiOutlineEdit, AiFillLike, AiFillDislike} from 'react-icons/ai';
 import {JSXUtils} from "../../utils/JSXUtils";
 import {UserDetailsUtil} from "../../utils/UserDetailsUtil";
-import TextEditor from "../adminPortal/platformCapabilities/TextEditor";
+import MathEditor from "../../components/common/MathEditor";
 import { MiscUtils } from '../../utils/MiscUtils';
 import notify from '../../utils/notify';
 import ClipLoader from "react-spinners/ClipLoader";
@@ -326,12 +326,18 @@ class QuestionComment extends React.Component {
         if(this.props.questionDetails.commentIndex != null) {
             postButtonText = 'Post Reply';
         }
-        return <div className='py-2'> 
-            <TextEditor
-                editorRef = {this.props.editorRef}
-                onChange={this.updateCommentBoxData}
-                data={currentCommentData}
-            />
+        return <div className='py-2'>
+            <div className='rounded-lg border border-gray-200 overflow-hidden'>
+                <MathEditor
+                    id='comment-editor'
+                    label='Your comment'
+                    onChange={this.updateCommentBoxData}
+                    value={currentCommentData}
+                    minHeight='9rem'
+                    placeholder={'Explain your reasoning. Maths goes between $$ marks, '
+                        + 'e.g. $$v = u + at$$'}
+                />
+            </div>
             <div className='flex flex-row gap-2 pt-2'>
                 <Button size="sm" variant="primary" onClick={this.postCommentBoxData}>{postButtonText}</Button>
                 <Button size="sm" variant="secondary" onClick={this.cancelPostingCommentBoxData}>Cancel</Button>

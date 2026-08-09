@@ -100,7 +100,21 @@ const GoogleSignInButton = ({ onSignIn, onError, buttonOptions, className }) => 
         );
     }
 
-    return <div ref={containerRef} className={className} />;
+    // `overflow-hidden` is load-bearing, not cosmetic.
+    //
+    // For the icon-only variant used by the small-screen header, GIS sizes its own
+    // wrapper to 32px but draws the iframe inside it at 64px, with the wrapper left
+    // on `overflow: visible`. The iframe therefore hangs 32px past the container.
+    // In the mobile header that container sits flush against the right gutter, so
+    // the excess pushed the document 8px wider than the viewport and every page
+    // with a sign-in button got a horizontal scrollbar on a phone.
+    //
+    // Clipping here was verified not to touch the button: the header region renders
+    // pixel-for-pixel identically with and without it, because Google's visible
+    // artwork occupies only the left half of that iframe. Nothing in Google's
+    // markup can be styled directly, so our own container is the only join
+    // available.
+    return <div ref={containerRef} className={'overflow-hidden ' + (className || '')} />;
 };
 
 export default GoogleSignInButton;

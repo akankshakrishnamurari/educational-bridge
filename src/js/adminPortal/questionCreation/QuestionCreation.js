@@ -362,7 +362,15 @@ class QuestionCreation extends React.Component {
                         ].join(' ')}>
                             {this.getErrorsJSX()}
                             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 md:p-7">
-                                <SingleSelectMCQEditor editorRef={this.props.editorRef}/>
+                                {/* `editorRef` used to be threaded through here for
+                                    TinyMCE's image-upload blob cache. Nothing ever
+                                    created the ref — this route is rendered with no
+                                    props — so it arrived as undefined and the picker
+                                    callback threw on `editorRef.current.editorUpload`
+                                    every time an image was chosen. The replacement
+                                    editor reads files with FileReader and needs no
+                                    handle on the editor instance. */}
+                                <SingleSelectMCQEditor/>
                             </div>
                             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 md:p-7">
                                 {this.getMetaJSX()}

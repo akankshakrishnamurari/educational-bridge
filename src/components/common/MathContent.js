@@ -123,6 +123,67 @@ export const renderMath = (html) => {
 };
 
 /**
+ * Report the `$$...$$` spans KaTeX cannot parse.
+ *
+ * This lives beside renderMath deliberately. The authoring editor shows these
+ * messages to whoever is writing the question, and the only useful guarantee is
+ * that a span reported as fine here is a span that will typeset when a student
+ * loads it. Duplicating the decode/normalise chain in the editor would let the
+ * two drift, and the failure mode of drift is silent: an author is told their
+ * formula is valid and it renders as red source text in the exam.
+ *
+ * `throwOnError` is flipped on here — the opposite of renderMath, which must never
+ * throw because the imported bank is not guaranteed to be valid. Reporting is the
+ * one place where a parse failure is the information wanted.
+ *
+ * @returns {Array<{latex: string, message: string}>}
+ */
+export const findMathErrors = (html) => {
+    if (!html || html.indexOf('$$') === -1) {
+        return [];
+    }
+    const problems = [];
+
+    // MATH is non-greedy, so an odd number of delimiters leaves the last one
+    // unpaired and it renders as a literal "$$" rather than as maths. That looks
+    // like a rendering bug from the author's side, so name it.
+    const delimiters = html.split('$$').length - 1;
+    if (delimiters % 2 !== 0) {
+        problems.push({
+            latex: '',
+            message: 'Unclosed $$ — maths must open and close with a pair of $$.',
+        });
+    }
+
+    let match;
+    // A fresh RegExp because MATH is module-level and stateful with /g.
+    const scanner = new RegExp(MATH.source, 'g');
+    while ((match = scanner.exec(html)) !== null) {
+        const source = normalizePlainTex(decodeEntities(match[1])).trim();
+        if (!source) {
+            problems.push({ latex: match[0], message: 'Empty formula.' });
+            continue;
+        }
+        try {
+            katex.renderToString(source, {
+                displayMode: false,
+                throwOnError: true,
+                strict: false,
+                trust: false,
+            });
+        } catch (err) {
+            problems.push({
+                latex: source,
+                // KaTeX prefixes its own messages with "KaTeX parse error: ".
+                message: String((err && err.message) || 'Could not be typeset.')
+                    .replace(/^KaTeX parse error:\s*/, ''),
+            });
+        }
+    }
+    return problems;
+};
+
+/**
  * Sanitize then typeset. Sanitising first means KaTeX output (which we generate
  * ourselves and trust) is not stripped by the sanitiser.
  */

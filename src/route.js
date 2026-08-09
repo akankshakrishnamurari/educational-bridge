@@ -1,6 +1,6 @@
 import React from 'react';
 import QuestionCreation from "./js/adminPortal/questionCreation/QuestionCreation";
-import NewPaperPortal from "./js/adminPortal/paperCreation/NewPaperPortal";
+import PaperBuilder from "./js/adminPortal/paperCreation/PaperBuilder";
 import './App.css';
 import PaperView from "./js/paperSet/PaperView";
 import PaperSubmissionView from "./js/PaperSubmissionView";
@@ -58,7 +58,7 @@ const routes = [
     {
         loadData,
         path: "/paper/new",
-        element: <NewPaperPortal/>,
+        element: <PaperBuilder/>,
         exact: false,
     },
     {
