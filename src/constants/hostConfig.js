@@ -1,17 +1,12 @@
-// Production: frontend on Amplify (its own domain, HTTPS), backend on EC2 behind
-// Nginx + Certbot at api.educationalbridge.com (HTTPS). Both origins must be
-// HTTPS together or the browser blocks the API calls as mixed content.
-//
-// currentURLHost is temporarily the raw Amplify domain, NOT
-// www.educationalbridge.com. The custom domain's CNAME is stuck behind an
-// AWS-side CloudFront "alias already in use by another distribution" issue
-// (see infra/AWS_INFRA.md) and does not resolve to a working site yet.
-// Every internal link in the app is built from currentURLHost, so pointing
-// it at the broken custom domain sends users to a dead link on every click.
-// Switch this back to https://www.educationalbridge.com/ once that domain
-// association reaches AVAILABLE in Amplify.
+// Production: frontend served from educationalbridge.com via the EC2 box
+// (Nginx + Certbot, same host as the API) reverse-proxying to the Amplify
+// app's default domain -- see infra/AWS_INFRA.md for why this bypasses
+// Amplify's managed custom-domain/CloudFront flow (blocked by an AWS account
+// verification gate on CreateDistribution). Backend is the same EC2 host at
+// api.educationalbridge.com (HTTPS). Both origins must be HTTPS together or
+// the browser blocks the API calls as mixed content.
 export const currentHost = "https://api.educationalbridge.com/";
-export const currentURLHost = "https://main.d2oetkkpgv0e71.amplifyapp.com/";
+export const currentURLHost = "https://educationalbridge.com/";
 // The OAuth 2.0 Web application client from Google Cloud Console -> APIs &
 // Services -> Credentials. One client covers every environment; what has to be
 // per-environment is its "Authorized JavaScript origins" list, which must contain
