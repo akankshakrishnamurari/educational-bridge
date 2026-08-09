@@ -8,11 +8,11 @@ import EducationalBridgeHeader from '../../header/EducationalBridgeHeader';
 import Footer from '../../../components/common/Footer';
 import PageCard from '../../../components/common/Card';
 import Button from '../../../components/common/Button';
-import Badge from '../../../components/common/Badge';
 import FormField, { controlClasses } from '../../../components/common/FormField';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import PaperBlueprintPanel from '../../../components/paperCreation/PaperBlueprintPanel';
 import QuestionPicker from '../../../components/paperCreation/QuestionPicker';
+import PaperReviewPanel from '../../../components/paperCreation/PaperReviewPanel';
 import NewPaperTagComponent from './NewPaperTagComponent';
 import notify from '../../../utils/notify';
 import { typography, layout } from '../../../constants/designTokens';
@@ -38,7 +38,8 @@ import {
     totalQuestionCount,
     totalMarks,
     allSections,
-    validationProblems,
+    validationIssues,
+    advisoryNotes,
     isPublishable,
     toCreatePaperRequest,
 } from './paperBlueprint';
@@ -95,6 +96,68 @@ class PaperBuilder extends React.Component {
             isConfirmingPublish: false,
             isPublishing: false,
         };
+        this.reviewRef = React.createRef();
+        this.blueprintRef = React.createRef();
+    }
+
+    /**
+     * Take the author to whatever a review item refers to.
+     *
+     * The point of the review list is that each entry is a way to get to the
+     * problem, not a description of it. Selecting the section first matters: the
+     * blueprint panel only renders the marks inputs for the section it considers
+     * active, so scrolling without selecting would land on a collapsed row.
+     *
+     * Focusing is done after a frame rather than immediately because selecting the
+     * section re-renders the panel, and the field being aimed at may not exist in
+     * the DOM until that render has landed.
+     */
+    goToIssue = (subjectId, sectionId, field) => {
+        const blueprint = this.blueprint();
+        if (blueprint !== null && sectionId) {
+            this.update(selectSection(blueprint, sectionId));
+        }
+        window.requestAnimationFrame(() => {
+            // Three scopes, because the fields live at three levels. Section fields
+            // must be scoped by section id specifically: scoping them to the subject
+            // would match the first section in it, which is the wrong row whenever
+            // the subject has more than one.
+            let selector = null;
+            if (field === 'paperName' || field === 'allottedPaperTime') {
+                selector = '[data-issue-field="' + field + '"]';
+            } else if (field === 'subjectName' && subjectId) {
+                selector = '[data-subject-id="' + subjectId + '"] [data-issue-field="subjectName"]';
+            } else if (sectionId && field) {
+                selector = '[data-section-id="' + sectionId + '"] [data-issue-field="' + field + '"]';
+            }
+            const target = selector === null ? null : document.querySelector(selector);
+            if (target !== null) {
+                target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                // Selecting the existing text means the fix is a single keystroke
+                // for the common case of a placeholder name or a wrong number.
+                if (typeof target.select === 'function') {
+                    target.focus();
+                    target.select();
+                } else {
+                    target.focus();
+                }
+                return;
+            }
+            // No specific field — "add a question to this section" is answered by
+            // the picker, which is already retargeted by the selectSection above.
+            const fallback = (sectionId && document.querySelector('[data-section-id="' + sectionId + '"]'))
+                || (subjectId && document.querySelector('[data-subject-id="' + subjectId + '"]'))
+                || this.blueprintRef.current;
+            if (fallback !== null && fallback !== undefined) {
+                fallback.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            }
+        });
+    }
+
+    scrollToReview = () => {
+        if (this.reviewRef.current !== null) {
+            this.reviewRef.current.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        }
     }
 
     componentDidMount() {
@@ -261,33 +324,6 @@ class PaperBuilder extends React.Component {
         );
     }
 
-    getProblemsJSX = (problems) => {
-        if (problems.length === 0) {
-            return (
-                <PageCard padding='p-4' className='border-success-200 bg-success-50'>
-                    <p className='text-sm font-semibold text-success-700'>
-                        This paper is ready to publish.
-                    </p>
-                </PageCard>
-            );
-        }
-        return (
-            <PageCard padding='p-4'>
-                <h2 className='text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2'>
-                    Before publishing
-                    <Badge variant='warning' className='ml-2'>{problems.length}</Badge>
-                </h2>
-                {/* The whole list, always. The wizard raised these one at a time on
-                    step transitions, so the author never knew how much was left. */}
-                <ul className='flex flex-col gap-1 list-disc pl-5'>
-                    {problems.map((problem) => (
-                        <li key={problem} className='text-sm text-gray-600'>{problem}</li>
-                    ))}
-                </ul>
-            </PageCard>
-        );
-    }
-
     render() {
         if (typeof window === 'undefined') {
             return <div />;
@@ -301,7 +337,8 @@ class PaperBuilder extends React.Component {
                 </div>
             );
         }
-        const problems = validationProblems(blueprint);
+        const issues = validationIssues(blueprint);
+        const notes = advisoryNotes(blueprint);
         const section = activeSection(blueprint);
         const subject = section === null ? null : findSubject(blueprint, blueprint.activeSubjectId);
         const targetLabel = section === null
@@ -321,14 +358,29 @@ class PaperBuilder extends React.Component {
                                 question bank. Nothing is published until you say so.
                             </p>
                         </div>
-                        <Button
-                            variant='primary'
-                            size='lg'
-                            disabled={!isPublishable(blueprint) || this.state.isPublishing}
-                            onClick={() => this.setState({ isConfirmingPublish: true })}
-                        >
-                            {this.state.isPublishing ? 'Publishing…' : 'Publish paper'}
-                        </Button>
+                        {/* Never a disabled Publish button. A greyed-out control
+                            refuses without saying why and cannot be clicked to ask,
+                            which is the weakest feedback available. Until the paper
+                            is publishable this is a live control that takes the
+                            author to the list of reasons instead. */}
+                        {isPublishable(blueprint)
+                            ? <Button
+                                variant='primary'
+                                size='lg'
+                                disabled={this.state.isPublishing}
+                                onClick={() => this.setState({ isConfirmingPublish: true })}
+                            >
+                                {this.state.isPublishing ? 'Publishing…' : 'Publish paper'}
+                            </Button>
+                            : <Button
+                                variant='secondary'
+                                size='lg'
+                                onClick={this.scrollToReview}
+                            >
+                                {/* The count is in the label, so no badge beside it.
+                                    Both together read "Review 2 issues 2". */}
+                                Review {issues.length} {issues.length === 1 ? 'issue' : 'issues'}
+                            </Button>}
                     </div>
 
                     {/* Sticky so the totals stay visible while scrolling the bank.
@@ -345,6 +397,7 @@ class PaperBuilder extends React.Component {
                                     <input
                                         {...fieldProps}
                                         type='text'
+                                        data-issue-field='paperName'
                                         placeholder='e.g. JEE Main 2026 Mock Test 1'
                                         value={blueprint.paperName}
                                         onChange={(event) => this.update(
@@ -358,6 +411,7 @@ class PaperBuilder extends React.Component {
                                         {...fieldProps}
                                         type='number'
                                         min='1'
+                                        data-issue-field='allottedPaperTime'
                                         className={controlClasses(false) + ' tabular-nums'}
                                         value={blueprint.allottedPaperTime}
                                         onChange={(event) => this.update(
@@ -372,7 +426,7 @@ class PaperBuilder extends React.Component {
                     </PageCard>
 
                     <div className='mt-4 grid grid-cols-1 xl:grid-cols-12 gap-4 items-start'>
-                        <div className='xl:col-span-5 min-w-0'>
+                        <div className='xl:col-span-5 min-w-0' ref={this.blueprintRef}>
                             <PageCard>
                                 <h2 className={typography.h3 + ' mb-3'}>Blueprint</h2>
                                 <PaperBlueprintPanel
@@ -389,9 +443,6 @@ class PaperBuilder extends React.Component {
                                     onMoveSection={(id, offset) => this.update(moveSection(blueprint, id, offset))}
                                 />
                             </PageCard>
-                            <div className='mt-4'>
-                                {this.getProblemsJSX(problems)}
-                            </div>
                         </div>
 
                         <div className='xl:col-span-7 min-w-0'>
@@ -421,6 +472,21 @@ class PaperBuilder extends React.Component {
                             </PageCard>
                         </div>
                     </div>
+
+                    {/* Full width, and below both columns. Reviewing is a
+                        whole-paper job, so it does not belong in the 5/12 column
+                        the blueprint occupies — that is where the old bulleted
+                        list of problems was, and it had no room to say anything
+                        about the paper itself. */}
+                    <PaperReviewPanel
+                        reviewRef={this.reviewRef}
+                        blueprint={blueprint}
+                        issues={issues}
+                        notes={notes}
+                        isPublishing={this.state.isPublishing}
+                        onPublish={() => this.setState({ isConfirmingPublish: true })}
+                        onGoToIssue={this.goToIssue}
+                    />
                 </div>
 
                 {/* Rendered conditionally rather than passed an `isOpen` prop:

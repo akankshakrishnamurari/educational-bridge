@@ -353,57 +353,176 @@ export const moveQuestion = (blueprint, sectionId, questionId, offset) => {
  * problem, so an author fixed one, moved on, and met the next. Returning the whole
  * list lets the UI show what is outstanding at all times.
  */
-export const validationProblems = (blueprint) => {
-    const problems = [];
+/**
+ * Everything that blocks publishing, each tied to the thing that is wrong.
+ *
+ * The ids are what make the review panel useful rather than merely truthful: a
+ * problem the author can click to be taken to the offending field is a different
+ * control from a sentence describing it. `validationProblems` below still returns
+ * the plain messages, so there is one set of rules and two views of it.
+ *
+ * @returns {Array<{message: string, subjectId: ?string, sectionId: ?string, field: string}>}
+ */
+export const validationIssues = (blueprint) => {
+    const issues = [];
+    const add = (message, field, subjectId, sectionId) => issues.push({
+        message,
+        field,
+        subjectId: subjectId || null,
+        sectionId: sectionId || null,
+    });
+
     if (!blueprint.paperName || blueprint.paperName.trim() === '') {
-        problems.push('Give the paper a name.');
+        add('Give the paper a name.', 'paperName');
     }
     const minutes = Number(blueprint.allottedPaperTime);
     if (!Number.isFinite(minutes) || minutes <= 0) {
-        problems.push('Set how long the paper should run, in minutes.');
+        add('Set how long the paper should run, in minutes.', 'allottedPaperTime');
     }
     (blueprint.subjects || []).forEach((subject, subjectIndex) => {
         const subjectLabel = subject.name && subject.name.trim() !== ''
             ? subject.name.trim()
             : 'Subject ' + (subjectIndex + 1);
         if (!subject.name || subject.name.trim() === '') {
-            problems.push('Name ' + subjectLabel + '.');
+            add('Name ' + subjectLabel + '.', 'subjectName', subject.id);
         }
         const seen = {};
         (subject.sections || []).forEach((section, sectionIndex) => {
             const name = (section.name || '').trim();
             if (name === '') {
-                problems.push('Name section ' + (sectionIndex + 1) + ' in ' + subjectLabel + '.');
+                add('Name section ' + (sectionIndex + 1) + ' in ' + subjectLabel + '.',
+                    'sectionName', subject.id, section.id);
                 return;
             }
             // Not cosmetic. The publish payload is keyed by section name within a
             // subject, so two sections sharing one would silently collapse into a
             // single entry and one section's questions would never reach the API.
             if (seen[name] === true) {
-                problems.push('Two sections in ' + subjectLabel + ' are both called "' + name + '". Names must differ.');
+                add('Two sections in ' + subjectLabel + ' are both called "' + name + '". Names must differ.',
+                    'sectionName', subject.id, section.id);
             }
             seen[name] = true;
             if (section.questionIds.length === 0) {
-                problems.push('Add at least one question to ' + name + ' in ' + subjectLabel + '.');
+                add('Add at least one question to ' + name + ' in ' + subjectLabel + '.',
+                    'questions', subject.id, section.id);
             }
             if (!Number.isFinite(Number(section.positiveMarks)) || Number(section.positiveMarks) <= 0) {
-                problems.push('Marks for a correct answer in ' + name + ' must be above zero.');
+                add('Marks for a correct answer in ' + name + ' must be above zero.',
+                    'positiveMarks', subject.id, section.id);
             }
             if (!Number.isFinite(Number(section.negativeMarks)) || Number(section.negativeMarks) > 0) {
-                problems.push('Marks for a wrong answer in ' + name + ' must be zero or negative.');
+                add('Marks for a wrong answer in ' + name + ' must be zero or negative.',
+                    'negativeMarks', subject.id, section.id);
             }
         });
     });
     const subjectNames = (blueprint.subjects || []).map((subject) => (subject.name || '').trim());
     subjectNames.forEach((name, index) => {
         if (name !== '' && subjectNames.indexOf(name) !== index) {
-            problems.push('Two subjects are both called "' + name + '". Names must differ.');
+            add('Two subjects are both called "' + name + '". Names must differ.',
+                'subjectName', (blueprint.subjects[index] || {}).id);
         }
     });
-    return problems;
+    return issues;
 };
 
-export const isPublishable = (blueprint) => validationProblems(blueprint).length === 0;
+export const validationProblems = (blueprint) =>
+    validationIssues(blueprint).map((issue) => issue.message);
+
+export const isPublishable = (blueprint) => validationIssues(blueprint).length === 0;
+
+/** Marks a section contributes when every one of its questions is answered correctly. */
+export const sectionMarks = (section) =>
+    section.questionIds.length * numberOr(section.positiveMarks, 0);
+
+/**
+ * Things worth telling the author that are nonetheless not errors.
+ *
+ * Kept strictly apart from validationIssues. Mixing "you cannot publish this" with
+ * "you might not have meant this" trains people to skim both, and the second kind
+ * is a judgement about their paper that they are entitled to overrule. Nothing
+ * here blocks publishing.
+ *
+ * @returns {Array<{message: string, subjectId: ?string, sectionId: ?string}>}
+ */
+export const advisoryNotes = (blueprint) => {
+    const notes = [];
+    const sections = allSections(blueprint);
+    const filled = sections.filter((section) => section.questionIds.length > 0);
+    if (filled.length === 0) {
+        return notes;
+    }
+
+    // A section holding most of the paper's marks is usually a mistake in the
+    // marks-per-question rather than a deliberate weighting, and it is invisible
+    // from the question counts alone.
+    const paperMarks = totalMarks(blueprint);
+    if (paperMarks > 0 && filled.length > 1) {
+        filled.forEach((section) => {
+            const share = sectionMarks(section) / paperMarks;
+            if (share > 0.6) {
+                const owner = (blueprint.subjects || []).find(
+                    (subject) => (subject.sections || []).some((candidate) => candidate.id === section.id));
+                notes.push({
+                    message: '"' + (section.name || '').trim() + '" carries '
+                        + Math.round(share * 100) + '% of the marks in this paper.',
+                    subjectId: owner ? owner.id : null,
+                    sectionId: section.id,
+                });
+            }
+        });
+    }
+
+    // Sections of wildly different lengths are legitimate, but worth surfacing:
+    // it is the commonest sign that filling one section was forgotten halfway.
+    const counts = filled.map((section) => section.questionIds.length);
+    const fewest = Math.min(...counts);
+    const most = Math.max(...counts);
+    if (filled.length > 1 && most >= 5 && most >= fewest * 5) {
+        notes.push({
+            message: 'Section sizes range from ' + fewest + ' to ' + most
+                + ' questions. Check none was left unfinished.',
+            subjectId: null,
+            sectionId: null,
+        });
+    }
+
+    // Inconsistent penalties across sections are a fairness question a marker will
+    // be asked about, so it is better raised now than after the paper is sat.
+    const penalties = filled.map((section) => numberOr(section.negativeMarks, 0));
+    if (filled.length > 1 && new Set(penalties).size > 1) {
+        notes.push({
+            message: 'Wrong answers are penalised differently across sections ('
+                + [...new Set(penalties)].sort((a, b) => a - b).join(', ') + ').',
+            subjectId: null,
+            sectionId: null,
+        });
+    }
+
+    // Time per question is the single figure that most often reveals a paper is
+    // the wrong size, and it cannot be read off any of the other totals.
+    const minutes = Number(blueprint.allottedPaperTime);
+    const questions = totalQuestionCount(blueprint);
+    if (Number.isFinite(minutes) && minutes > 0 && questions > 0) {
+        const secondsEach = (minutes * 60) / questions;
+        if (secondsEach < 45) {
+            notes.push({
+                message: 'That is ' + Math.round(secondsEach) + ' seconds a question. '
+                    + 'Consider a longer paper or fewer questions.',
+                subjectId: null,
+                sectionId: null,
+            });
+        } else if (secondsEach > 420) {
+            notes.push({
+                message: 'That is ' + Math.round(secondsEach / 60) + ' minutes a question, '
+                    + 'which is generous for a timed paper.',
+                subjectId: null,
+                sectionId: null,
+            });
+        }
+    }
+    return notes;
+};
 
 /**
  * Assemble the create-paper request.

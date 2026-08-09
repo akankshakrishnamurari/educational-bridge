@@ -36,7 +36,12 @@ const SectionRow = ({
         : 'border-gray-200 bg-white hover:border-gray-300';
 
     return (
-        <li className={'rounded-lg border transition-colors ' + tone}>
+        // `data-section-id` and the `data-issue-field` attributes below are the
+        // targets the review panel navigates to. Addressing the DOM by data
+        // attribute rather than threading a ref per field keeps this component
+        // unaware of the review panel: it publishes where its fields are, and does
+        // not need to know who is looking.
+        <li data-section-id={section.id} className={'rounded-lg border transition-colors ' + tone}>
             {/* Selecting the section is what decides where picked questions go, so it
                 is the row's primary action and occupies the whole header. */}
             <button
@@ -56,6 +61,7 @@ const SectionRow = ({
             <div className='px-3 pb-3 pt-1 flex flex-col gap-2'>
                 <input
                     type='text'
+                    data-issue-field='sectionName'
                     className={controlClasses(section.name.trim() === '')}
                     value={section.name}
                     placeholder='Section name, e.g. Mechanics'
@@ -67,6 +73,7 @@ const SectionRow = ({
                         <span className='block text-xs text-gray-500 mb-1'>Correct</span>
                         <input
                             type='number'
+                            data-issue-field='positiveMarks'
                             className={controlClasses(false) + ' tabular-nums'}
                             value={section.positiveMarks}
                             onChange={(event) => onMarksChange(section.id, 'positiveMarks', event.target.value)}
@@ -76,6 +83,7 @@ const SectionRow = ({
                         <span className='block text-xs text-gray-500 mb-1'>Wrong</span>
                         <input
                             type='number'
+                            data-issue-field='negativeMarks'
                             className={controlClasses(false) + ' tabular-nums'}
                             value={section.negativeMarks}
                             onChange={(event) => onMarksChange(section.id, 'negativeMarks', event.target.value)}
@@ -138,10 +146,11 @@ const PaperBlueprintPanel = ({
             const subjectQuestionCount = subject.sections.reduce(
                 (sum, section) => sum + section.questionIds.length, 0);
             return (
-                <div key={subject.id} className='rounded-xl border border-gray-200 bg-gray-50/60 p-3'>
+                <div key={subject.id} data-subject-id={subject.id} className='rounded-xl border border-gray-200 bg-gray-50/60 p-3'>
                     <div className='flex items-center gap-2 mb-2'>
                         <input
                             type='text'
+                            data-issue-field='subjectName'
                             className={controlClasses(subject.name.trim() === '') + ' font-semibold'}
                             value={subject.name}
                             placeholder={'Subject ' + (subjectIndex + 1) + ' name, e.g. Physics'}

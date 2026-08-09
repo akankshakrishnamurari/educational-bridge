@@ -19,6 +19,9 @@ import {
     selectedQuestionIds,
     sectionHoldingQuestion,
     validationProblems,
+    validationIssues,
+    advisoryNotes,
+    sectionMarks,
     isPublishable,
     toCreatePaperRequest,
 } from './paperBlueprint';
@@ -252,6 +255,122 @@ describe('paper blueprint', () => {
         it('rejects a non-positive duration', () => {
             const blueprint = setPaperField(publishableBlueprint(), 'allottedPaperTime', 0);
             expect(validationProblems(blueprint).some((p) => p.indexOf('how long') !== -1)).toBe(true);
+        });
+    });
+
+    // The review panel turns each issue into a control that navigates to the thing
+    // that is wrong, so the ids and field name are load-bearing, not decoration.
+    describe('issues carry where to go', () => {
+
+        it('says which field a paper-level issue belongs to', () => {
+            const issues = validationIssues(setPaperField(createBlueprint(), 'allottedPaperTime', 0));
+            const name = issues.find((i) => i.field === 'paperName');
+            const time = issues.find((i) => i.field === 'allottedPaperTime');
+            expect(name).toBeDefined();
+            expect(time).toBeDefined();
+            // Paper-level, so neither is scoped to a subject or section.
+            expect(name.subjectId).toBeNull();
+            expect(name.sectionId).toBeNull();
+        });
+
+        it('scopes an empty-section issue to that subject and section', () => {
+            const blueprint = createBlueprint();
+            const subjectId = blueprint.subjects[0].id;
+            const sectionId = blueprint.subjects[0].sections[0].id;
+            const issue = validationIssues(blueprint).find((i) => i.field === 'questions');
+            expect(issue).toBeDefined();
+            expect(issue.subjectId).toBe(subjectId);
+            expect(issue.sectionId).toBe(sectionId);
+        });
+
+        it('scopes a marks issue to the section that holds the wrong number', () => {
+            let blueprint = publishableBlueprint();
+            blueprint = addSection(blueprint, blueprint.subjects[0].id);
+            const second = blueprint.activeSectionId;
+            blueprint = renameSection(blueprint, second, 'Section 2');
+            blueprint = toggleQuestion(blueprint, second, 'q2');
+            blueprint = setSectionMarks(blueprint, second, 'positiveMarks', 0);
+
+            const issue = validationIssues(blueprint).find((i) => i.field === 'positiveMarks');
+            expect(issue.sectionId).toBe(second);
+        });
+
+        it('reports the same set of rules as the message list', () => {
+            const blueprint = createBlueprint();
+            expect(validationIssues(blueprint).map((i) => i.message))
+                .toEqual(validationProblems(blueprint));
+        });
+    });
+
+    describe('sectionMarks', () => {
+
+        it('multiplies questions by the correct-answer mark', () => {
+            let blueprint = publishableBlueprint();
+            blueprint = toggleQuestion(blueprint, blueprint.activeSectionId, 'q2');
+            blueprint = setSectionMarks(blueprint, blueprint.activeSectionId, 'positiveMarks', 3);
+            expect(sectionMarks(findSection(blueprint, blueprint.activeSectionId))).toBe(6);
+        });
+
+        it('is zero for an empty section', () => {
+            expect(sectionMarks(createBlueprint().subjects[0].sections[0])).toBe(0);
+        });
+    });
+
+    // Advisory notes must never block publishing — that separation is the whole
+    // reason they are a different function.
+    describe('advisory notes', () => {
+
+        it('says nothing about an empty paper', () => {
+            expect(advisoryNotes(createBlueprint())).toEqual([]);
+        });
+
+        it('never makes a publishable paper unpublishable', () => {
+            let blueprint = publishableBlueprint();
+            // 1 question in 180 minutes is well past the "generous" threshold.
+            expect(advisoryNotes(blueprint).length).toBeGreaterThan(0);
+            expect(isPublishable(blueprint)).toBe(true);
+        });
+
+        it('flags a paper that leaves too little time per question', () => {
+            let blueprint = publishableBlueprint();
+            blueprint = setPaperField(blueprint, 'allottedPaperTime', 1);
+            for (let i = 0; i < 10; i += 1) {
+                blueprint = toggleQuestion(blueprint, blueprint.activeSectionId, 'extra' + i);
+            }
+            expect(advisoryNotes(blueprint).some((n) => /seconds a question/.test(n.message))).toBe(true);
+        });
+
+        it('flags one section carrying most of the marks, and links to it', () => {
+            let blueprint = publishableBlueprint();
+            blueprint = setSectionMarks(blueprint, blueprint.activeSectionId, 'positiveMarks', 100);
+            const heavy = blueprint.activeSectionId;
+            blueprint = addSection(blueprint, blueprint.subjects[0].id);
+            blueprint = renameSection(blueprint, blueprint.activeSectionId, 'Section 2');
+            blueprint = toggleQuestion(blueprint, blueprint.activeSectionId, 'q2');
+
+            const note = advisoryNotes(blueprint).find((n) => /% of the marks/.test(n.message));
+            expect(note).toBeDefined();
+            expect(note.sectionId).toBe(heavy);
+        });
+
+        it('flags inconsistent wrong-answer penalties across sections', () => {
+            let blueprint = publishableBlueprint();
+            blueprint = addSection(blueprint, blueprint.subjects[0].id);
+            const second = blueprint.activeSectionId;
+            blueprint = renameSection(blueprint, second, 'Section 2');
+            blueprint = toggleQuestion(blueprint, second, 'q2');
+            blueprint = setSectionMarks(blueprint, second, 'negativeMarks', -2);
+
+            expect(advisoryNotes(blueprint).some((n) => /penalised differently/.test(n.message))).toBe(true);
+        });
+
+        it('says nothing about penalties when every section agrees', () => {
+            let blueprint = publishableBlueprint();
+            blueprint = addSection(blueprint, blueprint.subjects[0].id);
+            blueprint = renameSection(blueprint, blueprint.activeSectionId, 'Section 2');
+            blueprint = toggleQuestion(blueprint, blueprint.activeSectionId, 'q2');
+
+            expect(advisoryNotes(blueprint).some((n) => /penalised differently/.test(n.message))).toBe(false);
         });
     });
 
